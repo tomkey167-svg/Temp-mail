@@ -13,6 +13,7 @@ import { db, OperationType, handleFirestoreError } from "./firebase";
 import { MailMessage, MailDetails, BlogArticle, FAQItem } from "./types";
 import { FAQ_DATA, BLOG_DATA } from "./data";
 import { Language, LANGUAGES, TRANSLATIONS, FAQ_TRANSLATIONS } from "./translations";
+import { Analytics } from '@vercel/analytics/react';
 
 export default function App() {
   // Language State
@@ -2260,6 +2261,9 @@ export default function App() {
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* Vercel Web Analytics */}
+      <Analytics />
 
     </div>
   );
