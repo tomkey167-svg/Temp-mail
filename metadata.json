@@ -1,0 +1,6 @@
+{
+  "name": "Temporary Email Generator",
+  "description": "A fast, secure, and disposable temporary email address generator to protect your privacy and keep your inbox clean of spam.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

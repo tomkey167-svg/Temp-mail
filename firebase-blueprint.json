@@ -1,0 +1,54 @@
+{
+  "entities": {
+    "ReceivedEmail": {
+      "title": "Received Email Message",
+      "description": "A backup record of a temporary email received by a burner address, stored for durable accessibility.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "The unique message ID assigned by the router."
+        },
+        "from": {
+          "type": "string",
+          "description": "The sender's email address."
+        },
+        "subject": {
+          "type": "string",
+          "description": "The email subject line."
+        },
+        "date": {
+          "type": "string",
+          "description": "The human-readable receipt date."
+        },
+        "body": {
+          "type": "string",
+          "description": "The main content of the message."
+        },
+        "htmlBody": {
+          "type": "string",
+          "description": "HTML formatting of the message body."
+        },
+        "textBody": {
+          "type": "string",
+          "description": "Plain-text formatting of the message body."
+        },
+        "recipient": {
+          "type": "string",
+          "description": "The temporary burner address that received this message."
+        },
+        "timestamp": {
+          "type": "string",
+          "description": "ISO timestamp representing the arrival time."
+        }
+      },
+      "required": ["id", "from", "subject", "recipient", "timestamp"]
+    }
+  },
+  "firestore": {
+    "/received_emails/{emailId}": {
+      "schema": "ReceivedEmail",
+      "description": "Durable collection of incoming verification emails synced to secure cloud storage."
+    }
+  }
+}
