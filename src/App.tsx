@@ -5,7 +5,7 @@ import {
   MessageSquare, Download, Sun, Moon, FileText, Lock, 
   AlertCircle, ExternalLink, Eye, Send, Globe, Star, UploadCloud,
   Smartphone, Play, Bot, Zap, Chrome, ChevronDown, ChevronUp,
-  Apple, Shield, Flame, Compass
+  Apple, Shield, Flame, Compass, QrCode
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { collection, query, where, getDocs, setDoc, doc, getDoc } from "firebase/firestore";
@@ -15,6 +15,26 @@ import { FAQ_DATA, BLOG_DATA } from "./data";
 import { Language, LANGUAGES, TRANSLATIONS, FAQ_TRANSLATIONS } from "./translations";
 
 export default function App() {
+  // Diagnostic logs state
+  const [apiLogs, setApiLogs] = useState<{
+    id: string;
+    timestamp: string;
+    type: "info" | "success" | "error" | "warning";
+    message: string;
+    data?: any;
+  }[]>([]);
+  const [showDiagnostics, setShowDiagnostics] = useState<boolean>(true);
+  const [expandedLogIds, setExpandedLogIds] = useState<Record<string, boolean>>({});
+
+  const addDiagnosticLog = useCallback((type: "info" | "success" | "error" | "warning", message: string, data?: any) => {
+    const timestamp = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+    const logId = Math.random().toString(36).substring(2, 9);
+    setApiLogs((prev) => [
+      { id: logId, timestamp, type, message, data },
+      ...prev.slice(0, 49) // Keep last 50 logs
+    ]);
+  }, []);
+
   // Language State
   const [lang, setLang] = useState<Language>(() => {
     if (typeof window !== "undefined") {
@@ -64,7 +84,6 @@ export default function App() {
   const [isSpamAlertVisible, setIsSpamAlertVisible] = useState<boolean>(true);
   const [activeTab, setActiveTab] = useState<"messages" | "saved">("messages");
   const [mobileMenuOpen, setMobileMenuOpen] = useState<boolean>(false);
-  const [showRawSource, setShowRawSource] = useState<boolean>(false);
 
   // Cookie Consent Banner State
   const [cookieConsent, setCookieConsent] = useState<boolean>(() => {
@@ -160,19 +179,25 @@ export default function App() {
 
   // Fetch available domains on load
   const fetchDomains = async () => {
+    addDiagnosticLog("info", "Request started: GET /api/domains");
     try {
       const res = await fetch("/api/domains");
       if (res.ok) {
         const data = await res.json();
         const sortedDomains = (data as string[]).sort((a, b) => a.length - b.length);
         setDomains(sortedDomains);
+        addDiagnosticLog("success", `Request succeeded: GET /api/domains. Loaded ${sortedDomains.length} domains.`, sortedDomains);
         return sortedDomains;
+      } else {
+        addDiagnosticLog("error", `Request failed: GET /api/domains (HTTP ${res.status})`);
       }
     } catch (e) {
       console.error("Failed to fetch domains", e);
+      addDiagnosticLog("error", `Request failed: GET /api/domains. Error: ${e instanceof Error ? e.message : String(e)}`, e);
     }
     const fallback = ["mail.tm", "emlpro.com", "emltmp.com", "secmail.pro", "web-library.net"];
     setDomains(fallback);
+    addDiagnosticLog("warning", `Using fallback domain list: ${fallback.join(", ")}`);
     return fallback;
   };
 
@@ -213,8 +238,10 @@ export default function App() {
       localStorage.setItem("volt_domain", randomDomain);
       localStorage.setItem("volt_email", fullAddress);
       localStorage.setItem("volt_expiry_timestamp", String(Date.now() + 600000));
+      addDiagnosticLog("success", `Active mailbox updated to: ${fullAddress}. Inbox polling sequence initialized.`);
     } catch (e) {
       console.error("Failed to generate mailbox", e);
+      addDiagnosticLog("error", `Failed to generate mailbox: ${e instanceof Error ? e.message : String(e)}`, e);
     }
   };
 
@@ -235,9 +262,11 @@ export default function App() {
           setActiveDomain(savedDomain);
           setEmailAddress(savedEmail);
           setTimeLeft(remSecs);
+          addDiagnosticLog("success", `Restored saved mailbox session: ${savedEmail}. Remaining lifetime: ${Math.floor(remSecs / 60)}m ${remSecs % 60}s.`);
           return;
         }
       }
+      addDiagnosticLog("info", "No active session found or previous session expired. Creating a new mailbox.");
       await generateNewMailbox(domainList);
     };
     initMailbox();
@@ -249,15 +278,25 @@ export default function App() {
     if (!isAutoRefresh) setIsRefreshing(true);
     else setIsLoadingMessages(messages.length === 0);
 
+    const checkType = isAutoRefresh ? "Auto-Refresh Poll" : "Manual Refresh";
+    addDiagnosticLog("info", `${checkType} initiated for mailbox: ${emailAddress}`);
+
     try {
       // 1. Fetch from secure temporary mail API
       let apiMessages: MailMessage[] = [];
-      const res = await fetch(`/api/messages?login=${username}&domain=${activeDomain}`);
+      const apiEndpoint = `/api/messages?login=${username}&domain=${activeDomain}`;
+      addDiagnosticLog("info", `Requesting incoming messages from server: GET ${apiEndpoint}`);
+      
+      const res = await fetch(apiEndpoint);
       if (res.ok) {
         apiMessages = await res.json();
+        addDiagnosticLog("success", `Server GET ${apiEndpoint} responded with HTTP ${res.status}. Received ${apiMessages.length} messages.`, apiMessages);
+      } else {
+        addDiagnosticLog("error", `Server GET ${apiEndpoint} failed with HTTP ${res.status} ${res.statusText}`);
       }
 
       // 2. Query Firestore backup for any messages matching this recipient
+      addDiagnosticLog("info", `Requesting backed-up messages from Firestore db: received_emails where recipient == "${emailAddress}"`);
       const q = query(
         collection(db, "received_emails"),
         where("recipient", "==", emailAddress)
@@ -267,6 +306,7 @@ export default function App() {
       try {
         querySnapshot = await getDocs(q);
       } catch (err) {
+        addDiagnosticLog("warning", `Firestore GET query failed: ${err instanceof Error ? err.message : String(err)}`);
         handleFirestoreError(err, OperationType.GET, "received_emails");
         throw err;
       }
@@ -281,8 +321,12 @@ export default function App() {
           date: data.date || ""
         });
       });
+      addDiagnosticLog("success", `Firestore query returned ${firestoreMessages.length} backed-up messages.`, firestoreMessages);
 
       // 3. Save any new API messages to Firestore to secure them
+      if (apiMessages.length > 0) {
+        addDiagnosticLog("info", `Synchronizing ${apiMessages.length} new API message(s) to Firestore backup...`);
+      }
       for (const msg of apiMessages) {
         const docRef = doc(db, "received_emails", `${emailAddress}_${msg.id}`);
         // Use non-blocking writes to avoid delaying state updates
@@ -293,8 +337,11 @@ export default function App() {
           date: msg.date,
           recipient: emailAddress,
           timestamp: new Date().toISOString()
-        }, { merge: true }).catch(err => {
+        }, { merge: true }).then(() => {
+          addDiagnosticLog("info", `Successfully backed up message ID ${msg.id} to Firestore.`);
+        }).catch(err => {
           console.error("Error saving message list doc to Firestore", err);
+          addDiagnosticLog("warning", `Failed to back up message ID ${msg.id} to Firestore: ${err instanceof Error ? err.message : String(err)}`);
           handleFirestoreError(err, OperationType.WRITE, `received_emails/${emailAddress}_${msg.id}`);
         });
       }
@@ -316,8 +363,10 @@ export default function App() {
       mergedList.sort((a, b) => Number(b.id) - Number(a.id));
 
       setMessages(mergedList);
+      addDiagnosticLog("info", `Polling cycle complete. Total merged messages in UI display: ${mergedList.length}.`);
     } catch (e) {
       console.error("Failed to fetch messages with Firestore backup", e);
+      addDiagnosticLog("error", `Exception during fetch inbox cycle: ${e instanceof Error ? e.message : String(e)}`, e);
     } finally {
       setIsRefreshing(false);
       setIsLoadingMessages(false);
@@ -357,6 +406,13 @@ export default function App() {
   const copyToClipboard = () => {
     if (!emailAddress) return;
     navigator.clipboard.writeText(emailAddress);
+    
+    // Select the text inside the simulated input field for instant visual feedback
+    const inputEl = document.getElementById("mail-address-input") as HTMLInputElement;
+    if (inputEl) {
+      inputEl.select();
+    }
+    
     setIsCopied(true);
     setTimeout(() => setIsCopied(false), 2000);
   };
@@ -447,17 +503,20 @@ export default function App() {
   const handleReadMessage = async (msgId: string | number) => {
     if (!username || !activeDomain || !emailAddress) return;
     setIsLoadingContent(true);
-    setShowRawSource(false);
+
+    addDiagnosticLog("info", `Request started: Read details for message ID "${msgId}"`);
 
     try {
       const res = await fetch(`/api/message?login=${username}&domain=${activeDomain}&id=${msgId}`);
       if (res.ok) {
         const details: MailDetails = await res.json();
         setSelectedMessage(details);
+        addDiagnosticLog("success", `Request succeeded: GET /api/message for ID ${msgId}. Subject: "${details.subject || "(No Subject)"}"`, details);
 
         // Backup full content (with body/htmlBody/textBody) to Firestore securely
         const docRef = doc(db, "received_emails", `${emailAddress}_${msgId}`);
         try {
+          addDiagnosticLog("info", `Syncing full message body payload to Firestore for offline persistence...`);
           await setDoc(docRef, {
             id: String(msgId),
             from: details.from,
@@ -469,16 +528,20 @@ export default function App() {
             recipient: emailAddress,
             timestamp: new Date().toISOString()
           }, { merge: true });
+          addDiagnosticLog("success", `Full message body payload synced to Firestore successfully.`);
         } catch (err) {
+          addDiagnosticLog("warning", `Firestore backup write failed: ${err instanceof Error ? err.message : String(err)}`);
           handleFirestoreError(err, OperationType.WRITE, `received_emails/${emailAddress}_${msgId}`);
         }
       } else {
         // Fallback to Firestore backup if the temporary mail link expired
+        addDiagnosticLog("warning", `API GET /api/message failed with HTTP ${res.status}. Falling back to Firestore backup...`);
         const docRef = doc(db, "received_emails", `${emailAddress}_${msgId}`);
         let docSnap;
         try {
           docSnap = await getDoc(docRef);
         } catch (err) {
+          addDiagnosticLog("error", `Firestore fallback getDoc query failed: ${err instanceof Error ? err.message : String(err)}`);
           handleFirestoreError(err, OperationType.GET, `received_emails/${emailAddress}_${msgId}`);
           throw err;
         }
@@ -494,10 +557,14 @@ export default function App() {
             htmlBody: data.htmlBody || "",
             attachments: []
           });
+          addDiagnosticLog("success", `Successfully retrieved cached message content from Firestore backup.`, data);
+        } else {
+          addDiagnosticLog("error", `No backup document found in Firestore for message ID ${msgId}`);
         }
       }
     } catch (e) {
       console.error("Failed to read message details", e);
+      addDiagnosticLog("warning", `Exception during read message details: ${e instanceof Error ? e.message : String(e)}. Trying Firestore fallback...`);
       // Fallback to Firestore backup on API failure/offline
       try {
         const docRef = doc(db, "received_emails", `${emailAddress}_${msgId}`);
@@ -505,6 +572,7 @@ export default function App() {
         try {
           docSnap = await getDoc(docRef);
         } catch (err) {
+          addDiagnosticLog("error", `Firestore fallback getDoc query failed: ${err instanceof Error ? err.message : String(err)}`);
           handleFirestoreError(err, OperationType.GET, `received_emails/${emailAddress}_${msgId}`);
           throw err;
         }
@@ -520,9 +588,13 @@ export default function App() {
             htmlBody: data.htmlBody || "",
             attachments: []
           });
+          addDiagnosticLog("success", `Successfully retrieved cached message content from Firestore backup.`, data);
+        } else {
+          addDiagnosticLog("error", `No backup document found in Firestore for message ID ${msgId}`);
         }
       } catch (err) {
         console.error("Failed to retrieve fallback email details from Firestore", err);
+        addDiagnosticLog("error", `All read pathways failed. Could not load message ID ${msgId} details.`);
       }
     } finally {
       setIsLoadingContent(false);
@@ -818,37 +890,47 @@ export default function App() {
             </div>
 
             {/* ACTION BUTTONS ROW */}
-            <div className="grid grid-cols-3 gap-3.5 text-center pt-2">
+            <div className="grid grid-cols-4 gap-2 sm:gap-3.5 text-center pt-2">
               <button
                 onClick={copyToClipboard}
-                className="flex flex-col items-center justify-center p-3.5 sm:p-5 rounded-2xl border border-gray-200 dark:border-gray-800 bg-[#fbfbfb] dark:bg-[#1c222b] hover:border-blue-600 dark:hover:border-blue-500 hover:text-blue-600 dark:hover:text-blue-400 cursor-pointer transition-all shadow-sm hover:shadow-md"
+                className="flex flex-col items-center justify-center p-2.5 sm:p-5 rounded-2xl border border-gray-200 dark:border-gray-800 bg-[#fbfbfb] dark:bg-[#1c222b] hover:border-blue-600 dark:hover:border-blue-500 hover:text-blue-600 dark:hover:text-blue-400 cursor-pointer transition-all shadow-sm hover:shadow-md"
                 id="action-btn-copy"
                 title="Copy address to clipboard"
               >
                 <Copy className="w-5 h-5 mb-1.5" />
-                <span className="text-[11px] font-extrabold font-sans uppercase tracking-wider block">
+                <span className="text-[10px] sm:text-[11px] font-extrabold font-sans uppercase tracking-wider block">
                   {isCopied ? t.copied : t.copy}
                 </span>
               </button>
 
               <button
+                onClick={() => setActiveModal("qrcode")}
+                className="flex flex-col items-center justify-center p-2.5 sm:p-5 rounded-2xl border border-gray-200 dark:border-gray-800 bg-[#fbfbfb] dark:bg-[#1c222b] hover:border-blue-600 dark:hover:border-blue-500 hover:text-blue-600 dark:hover:text-blue-400 cursor-pointer transition-all shadow-sm hover:shadow-md"
+                id="action-btn-qrcode"
+                title="Display QR code of active email address"
+              >
+                <QrCode className="w-5 h-5 mb-1.5 text-gray-500 dark:text-gray-400 group-hover:text-blue-600 dark:group-hover:text-blue-400" />
+                <span className="text-[10px] sm:text-[11px] font-extrabold font-sans uppercase tracking-wider block">QR Code</span>
+              </button>
+
+              <button
                 onClick={() => generateNewMailbox()}
-                className="flex flex-col items-center justify-center p-3.5 sm:p-5 rounded-2xl border border-gray-200 dark:border-gray-800 bg-[#fbfbfb] dark:bg-[#1c222b] hover:border-blue-600 dark:hover:border-blue-500 hover:text-blue-600 dark:hover:text-blue-400 cursor-pointer transition-all shadow-sm hover:shadow-md"
+                className="flex flex-col items-center justify-center p-2.5 sm:p-5 rounded-2xl border border-gray-200 dark:border-gray-800 bg-[#fbfbfb] dark:bg-[#1c222b] hover:border-blue-600 dark:hover:border-blue-500 hover:text-blue-600 dark:hover:text-blue-400 cursor-pointer transition-all shadow-sm hover:shadow-md"
                 id="action-btn-change"
                 title="Generate new temporary mailbox"
               >
                 <RefreshCw className="w-5 h-5 mb-1.5" />
-                <span className="text-[11px] font-extrabold font-sans uppercase tracking-wider block">{t.change}</span>
+                <span className="text-[10px] sm:text-[11px] font-extrabold font-sans uppercase tracking-wider block">{t.change}</span>
               </button>
 
               <button
                 onClick={handleDeleteAddress}
-                className="flex flex-col items-center justify-center p-3.5 sm:p-5 rounded-2xl border border-gray-200 dark:border-gray-800 bg-[#fbfbfb] dark:bg-[#1c222b] hover:border-red-500 hover:text-red-500 cursor-pointer transition-all shadow-sm hover:shadow-md"
+                className="flex flex-col items-center justify-center p-2.5 sm:p-5 rounded-2xl border border-gray-200 dark:border-gray-800 bg-[#fbfbfb] dark:bg-[#1c222b] hover:border-red-500 hover:text-red-500 cursor-pointer transition-all shadow-sm hover:shadow-md"
                 id="action-btn-delete"
                 title="Delete current address"
               >
                 <Trash2 className="w-5 h-5 mb-1.5" />
-                <span className="text-[11px] font-extrabold font-sans uppercase tracking-wider block">{t.delete}</span>
+                <span className="text-[10px] sm:text-[11px] font-extrabold font-sans uppercase tracking-wider block">{t.delete}</span>
               </button>
             </div>
 
@@ -916,20 +998,11 @@ export default function App() {
                       className={`p-2 rounded-xl border transition-colors cursor-pointer ${
                         isMessageSaved(selectedMessage.id)
                           ? "bg-amber-500/10 border-amber-400 text-amber-500"
-                          : "border-gray-200 dark:border-gray-850 hover:text-amber-500 text-gray-400 bg-transparent"
+                          : "border-gray-200 dark:border-gray-855 hover:text-amber-500 text-gray-400 bg-transparent"
                       }`}
                       title={isMessageSaved(selectedMessage.id) ? "Remove from Saved" : "Save Message"}
                     >
                       <Star className={`w-4 h-4 ${isMessageSaved(selectedMessage.id) ? "fill-current" : ""}`} />
-                    </button>
-
-                    {/* Source / HTML toggle */}
-                    <button
-                      onClick={() => setShowRawSource(!showRawSource)}
-                      className="px-3.5 py-2 rounded-xl text-xs font-bold border border-gray-200 dark:border-gray-850 hover:bg-gray-50 dark:hover:bg-gray-800 text-gray-600 dark:text-gray-300 flex items-center space-x-1 cursor-pointer bg-transparent"
-                    >
-                      <FileText className="w-3.5 h-3.5" />
-                      <span>{showRawSource ? t.viewHtml : t.viewSource}</span>
                     </button>
                   </div>
                 </div>
@@ -975,16 +1048,12 @@ export default function App() {
                   )}
                 </div>
 
-                {/* Main Content Area */}
+                 {/* Main Content Area */}
                 <div>
                   {isLoadingContent ? (
                     <div className="py-12 flex flex-col items-center justify-center space-y-3">
                       <div className="w-8 h-8 rounded-full border-4 border-blue-100 border-t-blue-600 animate-spin" />
                       <span className="text-xs font-bold text-gray-400">{t.loadingPayload}</span>
-                    </div>
-                  ) : showRawSource ? (
-                    <div className="bg-[#0d1117] p-4.5 rounded-2xl border border-gray-800 overflow-x-auto text-xs font-mono text-amber-500 whitespace-pre-wrap">
-                      {JSON.stringify(selectedMessage, null, 2)}
                     </div>
                   ) : (
                     <div>
@@ -1018,7 +1087,7 @@ export default function App() {
                           />
                         </div>
                       ) : (
-                        <div className="bg-gray-50 dark:bg-[#0d1117] p-5 rounded-2xl border border-gray-200 dark:border-gray-850 text-sm whitespace-pre-wrap leading-relaxed text-gray-700 dark:text-gray-300">
+                        <div className="bg-gray-50 dark:bg-[#0d1117] p-5 rounded-2xl border border-gray-200 dark:border-gray-855 text-sm whitespace-pre-wrap leading-relaxed text-gray-700 dark:text-gray-300">
                           {selectedMessage.body || selectedMessage.textBody || "Empty message body received."}
                         </div>
                       )}
@@ -1116,6 +1185,126 @@ export default function App() {
               {lang === "fr" && "Protection électronique anti-spam active"}
             </span>
           </div>
+        </div>
+
+        {/* DEVELOPER API DIAGNOSTICS CONSOLE */}
+        <div className="bg-white dark:bg-[#161b22] border border-gray-200 dark:border-gray-800 rounded-3xl p-6 sm:p-8 shadow-xl space-y-5">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+            <div className="flex items-center space-x-3">
+              <div className="relative flex h-3 w-3">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-3 w-3 bg-emerald-500"></span>
+              </div>
+              <div>
+                <h3 className="font-display font-black text-sm sm:text-base text-gray-900 dark:text-white uppercase tracking-wider flex items-center gap-2">
+                  <span>API Response & Fetch Diagnostics</span>
+                  <span className="px-2 py-0.5 text-[9px] bg-blue-100 dark:bg-blue-950 text-blue-600 dark:text-blue-300 rounded-full font-mono normal-case">Developer Console</span>
+                </h3>
+                <p className="text-[11px] text-gray-400 font-medium font-sans">
+                  Monitor live `/api/messages` payloads, server statuses, and Firestore failovers.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                onClick={() => {
+                  const logString = apiLogs.map(l => `[${l.timestamp}] [${l.type.toUpperCase()}] ${l.message} ${l.data ? '\nPayload: ' + JSON.stringify(l.data, null, 2) : ''}`).join('\n\n');
+                  navigator.clipboard.writeText(logString);
+                  alert("Diagnostic log bundle copied to clipboard!");
+                }}
+                className="px-3 py-1.5 bg-gray-100 dark:bg-[#0d1117] hover:bg-gray-200 dark:hover:bg-gray-800 text-gray-600 dark:text-gray-300 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer border border-gray-200 dark:border-gray-800"
+                title="Copy all logs to clipboard as text"
+              >
+                <Copy className="w-3.5 h-3.5" />
+                <span>Copy Bundle</span>
+              </button>
+
+              <button
+                onClick={() => {
+                  setApiLogs([]);
+                  addDiagnosticLog("info", "Diagnostics history cleared by developer.");
+                }}
+                className="px-3 py-1.5 bg-rose-50 dark:bg-rose-950/20 hover:bg-rose-100 dark:hover:bg-rose-950/40 text-rose-600 dark:text-rose-400 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer border border-rose-100 dark:border-rose-900/30"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                <span>Clear Console</span>
+              </button>
+
+              <button
+                onClick={() => fetchInbox(false)}
+                className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer shadow-md shadow-blue-500/10 border-0"
+              >
+                <RefreshCw className={`w-3.5 h-3.5 ${isRefreshing ? "animate-spin" : ""}`} />
+                <span>Trigger Fetch</span>
+              </button>
+
+              <button
+                onClick={() => setShowDiagnostics(!showDiagnostics)}
+                className="p-2 bg-gray-100 dark:bg-[#0d1117] hover:bg-gray-200 dark:hover:bg-gray-800 text-gray-500 rounded-xl transition-all cursor-pointer border border-gray-200 dark:border-gray-800"
+              >
+                {showDiagnostics ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+              </button>
+            </div>
+          </div>
+
+          {showDiagnostics && (
+            <motion.div
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: "auto" }}
+              exit={{ opacity: 0, height: 0 }}
+              className="space-y-3 overflow-hidden"
+            >
+              {/* Terminal screen */}
+              <div className="bg-[#0d1117] border border-gray-800 rounded-2xl p-4 font-mono text-xs text-gray-300 max-h-80 overflow-y-auto space-y-2.5 shadow-inner">
+                {apiLogs.length === 0 ? (
+                  <div className="py-8 text-center text-gray-500 space-y-1.5">
+                    <p className="font-semibold text-gray-400">⚡ Developer console is idle</p>
+                    <p className="text-[10px]">No API fetch has been recorded yet in this session. Pull to refresh or wait for automatic polling.</p>
+                  </div>
+                ) : (
+                  apiLogs.map((log) => {
+                    const isExpanded = expandedLogIds[log.id] || false;
+                    return (
+                      <div key={log.id} className="border-b border-gray-800/50 pb-2.5 last:border-0 last:pb-0">
+                        <div className="flex items-start gap-2">
+                          <span className="text-gray-500 shrink-0 select-none">[{log.timestamp}]</span>
+                          
+                          <span className={`px-1.5 py-0.5 rounded text-[10px] uppercase font-bold tracking-wider shrink-0 select-none ${
+                            log.type === "success" ? "bg-emerald-950 text-emerald-400 border border-emerald-900" :
+                            log.type === "error" ? "bg-rose-950 text-rose-400 border border-rose-900" :
+                            log.type === "warning" ? "bg-amber-950/50 text-amber-400 border border-amber-900/30" :
+                            "bg-blue-950 text-blue-400 border border-blue-900"
+                          }`}>
+                            {log.type}
+                          </span>
+
+                          <span className="text-gray-100 flex-1 break-all select-all">{log.message}</span>
+
+                          {log.data && (
+                            <button
+                              onClick={() => setExpandedLogIds(prev => ({ ...prev, [log.id]: !isExpanded }))}
+                              className="px-2 py-0.5 bg-gray-800 hover:bg-gray-700 text-gray-300 rounded text-[10px] font-bold cursor-pointer transition-colors border border-gray-700 shrink-0"
+                            >
+                              {isExpanded ? "Close" : "Inspect Payload"}
+                            </button>
+                          )}
+                        </div>
+
+                        {log.data && isExpanded && (
+                          <div className="mt-2.5 pl-4 border-l-2 border-blue-500/30">
+                            <pre className="p-3 bg-[#161b22] text-amber-300 rounded-xl overflow-x-auto text-[11px] border border-gray-800 leading-relaxed font-mono select-text">
+                              {JSON.stringify(log.data, null, 2)}
+                            </pre>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+            </motion.div>
+          )}
         </div>
 
         {/* 4. EDUCATIONAL ARTICLE */}
@@ -1625,8 +1814,13 @@ export default function App() {
               {/* Header */}
               <div className="flex items-center justify-between border-b border-gray-100 dark:border-gray-800 pb-4">
                 <div className="flex items-center space-x-2 text-blue-600 dark:text-blue-400">
-                  <ShieldCheck className="w-5 h-5" />
+                  {activeModal === "qrcode" ? (
+                    <QrCode className="w-5 h-5" />
+                  ) : (
+                    <ShieldCheck className="w-5 h-5" />
+                  )}
                   <h3 className="text-lg font-display font-black text-gray-900 dark:text-white uppercase tracking-wider">
+                    {activeModal === "qrcode" && "Email QR Code"}
                     {activeModal === "tools" && "Advanced Security Tools"}
                     {activeModal === "contact" && "Contact Support Team"}
                     {activeModal === "privacy" && "Privacy & Identity Policy"}
@@ -2124,6 +2318,41 @@ export default function App() {
                   </div>
                 )}
 
+                {/* QR CODE DISPLAY */}
+                {activeModal === "qrcode" && (
+                  <div className="flex flex-col items-center justify-center text-center space-y-6 py-4">
+                    <p className="text-sm font-semibold text-gray-500 dark:text-gray-400 max-w-sm leading-relaxed">
+                      Scan this QR code with your mobile device's camera or QR reader to quickly access or share your temporary mailbox address:
+                    </p>
+                    
+                    <div className="p-5 bg-white rounded-3xl shadow-lg border border-gray-150 inline-block transition-transform duration-300 hover:scale-[1.02]">
+                      {emailAddress ? (
+                        <img 
+                          src={`https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(emailAddress)}`} 
+                          alt="Email Address QR Code"
+                          className="w-48 h-48 block"
+                          referrerPolicy="no-referrer"
+                        />
+                      ) : (
+                        <div className="w-48 h-48 flex items-center justify-center bg-gray-100 text-gray-400 font-mono text-xs rounded-xl">
+                          No Email Address
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="space-y-1.5 w-full">
+                      <div 
+                        className="font-mono font-bold text-gray-800 dark:text-gray-200 select-all border border-gray-200 dark:border-gray-800 rounded-xl px-4 py-2.5 bg-gray-50 dark:bg-gray-900 break-all text-xs sm:text-sm max-w-md mx-auto cursor-pointer hover:border-blue-500 dark:hover:border-blue-500 transition-colors"
+                        onClick={copyToClipboard}
+                        title="Click to copy"
+                      >
+                        {emailAddress || "generating..."}
+                      </div>
+                      <p className="text-[10px] text-gray-400 font-medium">Click above to select and copy the email address</p>
+                    </div>
+                  </div>
+                )}
+
               </div>
 
               {/* Footer */}
@@ -2238,6 +2467,24 @@ export default function App() {
       </AnimatePresence>
 
       {/* 13. FLOATING ACTION TOASTS / OVERLAYS */}
+      <AnimatePresence>
+        {isCopied && (
+          <motion.div
+            initial={{ opacity: 0, y: 30, scale: 0.9 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: -20, scale: 0.9 }}
+            className="fixed bottom-6 right-6 z-50 flex items-center space-x-3.5 bg-emerald-500 text-white rounded-2xl px-5 py-4 shadow-2xl border border-emerald-400"
+          >
+            <div className="bg-white/20 p-1.5 rounded-lg shrink-0">
+              <Check className="w-4 h-4 text-white stroke-[3]" />
+            </div>
+            <div>
+              <p className="text-xs font-black uppercase tracking-wider font-sans leading-none">Copied!</p>
+              <p className="text-[11px] font-medium text-emerald-50/90 mt-0.5">Email address copied to your clipboard.</p>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Cookies Consent Overlay */}
       <AnimatePresence>
