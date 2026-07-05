@@ -5,7 +5,8 @@ import {
   MessageSquare, Download, Sun, Moon, FileText, Lock, 
   AlertCircle, ExternalLink, Eye, Send, Globe, Star, UploadCloud,
   Smartphone, Play, Bot, Zap, Chrome, ChevronDown, ChevronUp,
-  Apple, Shield, Flame, Compass, QrCode
+  Apple, Shield, Flame, Compass, QrCode, User, MailOpen, Volume2, VolumeX,
+  Twitter, Github, Instagram, Linkedin
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { collection, query, where, getDocs, setDoc, doc, getDoc } from "firebase/firestore";
@@ -15,6 +16,29 @@ import { FAQ_DATA, BLOG_DATA } from "./data";
 import { Language, LANGUAGES, TRANSLATIONS, FAQ_TRANSLATIONS } from "./translations";
 
 export default function App() {
+  const playNotificationSound = () => {
+    try {
+      const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
+      const playTone = (freq: number, start: number, duration: number) => {
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.type = "sine";
+        osc.frequency.setValueAtTime(freq, start);
+        gain.gain.setValueAtTime(0.12, start);
+        gain.gain.exponentialRampToValueAtTime(0.00001, start + duration);
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+        osc.start(start);
+        osc.stop(start + duration);
+      };
+      const now = audioCtx.currentTime;
+      playTone(523.25, now, 0.4);
+      playTone(659.25, now + 0.12, 0.5);
+    } catch (error) {
+      console.error("Failed to play notification sound:", error);
+    }
+  };
+
   // Diagnostic logs state
   const [apiLogs, setApiLogs] = useState<{
     id: string;
@@ -84,6 +108,13 @@ export default function App() {
   const [isSpamAlertVisible, setIsSpamAlertVisible] = useState<boolean>(true);
   const [activeTab, setActiveTab] = useState<"messages" | "saved">("messages");
   const [mobileMenuOpen, setMobileMenuOpen] = useState<boolean>(false);
+  const [soundEnabled, setSoundEnabled] = useState<boolean>(true);
+  const isFirstFetch = useRef(true);
+  const messagesRef = useRef<MailMessage[]>([]);
+
+  useEffect(() => {
+    messagesRef.current = messages;
+  }, [messages]);
 
   // Cookie Consent Banner State
   const [cookieConsent, setCookieConsent] = useState<boolean>(() => {
@@ -233,6 +264,7 @@ export default function App() {
       setTimeLeft(600); // 10 minutes default
       setSelectedMessage(null);
       setMessages([]);
+      isFirstFetch.current = true;
       
       localStorage.setItem("volt_username", generatedUsername);
       localStorage.setItem("volt_domain", randomDomain);
@@ -358,9 +390,20 @@ export default function App() {
         mergedMap.set(String(msg.id), msg);
       });
 
-      const mergedList = Array.from(mergedMap.values());
+       const mergedList = Array.from(mergedMap.values());
       // Sort in descending order (newest ID first)
       mergedList.sort((a, b) => Number(b.id) - Number(a.id));
+
+      if (isFirstFetch.current) {
+        isFirstFetch.current = false;
+      } else {
+        const hasNew = mergedList.some(
+          (newMsg) => !messagesRef.current.some((oldMsg) => String(oldMsg.id) === String(newMsg.id))
+        );
+        if (hasNew && soundEnabled) {
+          playNotificationSound();
+        }
+      }
 
       setMessages(mergedList);
       addDiagnosticLog("info", `Polling cycle complete. Total merged messages in UI display: ${mergedList.length}.`);
@@ -371,7 +414,7 @@ export default function App() {
       setIsRefreshing(false);
       setIsLoadingMessages(false);
     }
-  }, [username, activeDomain, emailAddress, messages.length]);
+  }, [username, activeDomain, emailAddress, soundEnabled]);
 
   // Refresh trigger on address change
   useEffect(() => {
@@ -442,6 +485,7 @@ export default function App() {
     setTimeLeft(600); // Reset timer to 10 minutes
     setSelectedMessage(null);
     setMessages([]);
+    isFirstFetch.current = true;
     setIsCustomizing(false);
 
     localStorage.setItem("volt_username", cleanUser);
@@ -481,6 +525,7 @@ export default function App() {
     setEmailAddress("");
     setMessages([]);
     setSelectedMessage(null);
+    isFirstFetch.current = true;
     setTimeLeft(600);
     setIsCustomizing(false);
     setIsMoreOpen(false);
@@ -720,49 +765,106 @@ export default function App() {
   const t = TRANSLATIONS[lang];
 
   return (
-    <div className={darkMode ? "dark text-[#f1f3f9] min-h-screen bg-[#0b1329] font-sans antialiased" : "text-gray-900 min-h-screen bg-white font-sans antialiased"}>
+    <div className={darkMode ? "dark text-[#f1f3f9] min-h-screen bg-[#0b1329] font-sans antialiased" : "text-gray-900 min-h-screen bg-[#fafbfe] font-sans antialiased"}>
       
-      {/* 1. BRAND-MATCHING HEADER (BLUE THEMED) */}
-      <header className="sticky top-0 z-40 bg-blue-600 text-white transition-colors py-3 shadow-lg">
+      {/* 1. BRAND-MATCHING HEADER (EMERALD REDESIGNED) */}
+      <header className="sticky top-0 z-40 bg-white/90 dark:bg-[#161b22]/90 backdrop-blur-md text-slate-800 dark:text-white transition-colors py-3.5 border-b border-slate-100 dark:border-gray-800 shadow-sm">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex items-center justify-between">
           
-          {/* Logo with white background & clean text */}
+          {/* Logo with Envelope Accent & clean text */}
           <div className="flex items-center space-x-2">
             <button 
               onClick={() => {
                 setSelectedBlogSlug(null);
                 setActiveModal(null);
+                window.scrollTo({ top: 0, behavior: "smooth" });
               }}
-              className="flex items-center space-x-2 text-left cursor-pointer bg-transparent border-0"
+              className="flex items-center space-x-2.5 text-left cursor-pointer bg-transparent border-0"
             >
-              <div className="bg-white text-blue-600 font-black rounded-lg w-7 h-7 flex items-center justify-center font-display text-sm shadow-md">
-                T
+              <div className="bg-[#eefbf6] dark:bg-emerald-950/40 text-[#00b074] rounded-xl w-9 h-9 flex items-center justify-center shadow-sm">
+                <Mail className="w-5 h-5 stroke-[2.5]" />
               </div>
-              <span className="font-display font-extrabold text-lg text-white tracking-tight">
-                Temp Mail<span className="hidden sm:inline"> Generator</span>
+              <span className="font-display font-black text-xl text-slate-800 dark:text-white tracking-tight">
+                Temp-Mail-Generator<span className="text-[#00b074]">.site</span>
               </span>
             </button>
-            <span className="bg-blue-500/40 text-white text-[9px] font-bold px-2 py-0.5 rounded">Free</span>
+          </div>
+
+          {/* Center Links - Real Mockup Navigation */}
+          <div className="hidden md:flex items-center space-x-7">
+            <button 
+              onClick={() => {
+                setSelectedBlogSlug(null);
+                setActiveModal(null);
+                window.scrollTo({ top: 0, behavior: "smooth" });
+              }}
+              className="relative text-sm font-bold text-[#00b074] hover:text-[#00b074] transition-colors py-1 cursor-pointer bg-transparent border-0"
+            >
+              Home
+              <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-[#00b074] rounded-full" />
+            </button>
+            <button 
+              onClick={() => {
+                const faqSec = document.getElementById("faq-section");
+                if (faqSec) {
+                  faqSec.scrollIntoView({ behavior: "smooth" });
+                }
+              }}
+              className="text-sm font-bold text-slate-500 hover:text-[#00b074] dark:text-gray-300 dark:hover:text-emerald-400 transition-colors py-1 cursor-pointer bg-transparent border-0"
+            >
+              FAQ
+            </button>
+            <button 
+              onClick={() => {
+                const blogSec = document.getElementById("blog-section");
+                if (blogSec) {
+                  blogSec.scrollIntoView({ behavior: "smooth" });
+                }
+              }}
+              className="text-sm font-bold text-slate-500 hover:text-[#00b074] dark:text-gray-300 dark:hover:text-emerald-400 transition-colors py-1 cursor-pointer bg-transparent border-0"
+            >
+              Blog
+            </button>
+            <button 
+              onClick={() => setActiveModal("privacy")}
+              className="text-sm font-bold text-slate-500 hover:text-[#00b074] dark:text-gray-300 dark:hover:text-emerald-400 transition-colors py-1 cursor-pointer bg-transparent border-0"
+            >
+              Privacy Policy
+            </button>
+            <button 
+              onClick={() => setActiveModal("contact")}
+              className="text-sm font-bold text-slate-500 hover:text-[#00b074] dark:text-gray-300 dark:hover:text-emerald-400 transition-colors py-1 cursor-pointer bg-transparent border-0"
+            >
+              Contact Us
+            </button>
           </div>
 
           {/* Header Controls */}
-          <div className="flex items-center space-x-2.5">
+          <div className="flex items-center space-x-3">
+            {/* Dark Mode toggle button */}
+            <button
+              onClick={() => setDarkMode(!darkMode)}
+              className="p-2 rounded-xl text-slate-400 hover:text-[#00b074] hover:bg-slate-50 dark:hover:bg-gray-800 transition-colors cursor-pointer"
+              title={darkMode ? "Switch to Light Mode" : "Switch to Dark Mode"}
+            >
+              {darkMode ? <Sun className="w-4.5 h-4.5" /> : <Moon className="w-4.5 h-4.5" />}
+            </button>
+
             {/* Language Selector Dropdown */}
             <div className="relative">
               <button
                 onClick={() => setIsLangOpen(!isLangOpen)}
-                className="flex items-center space-x-1.5 px-2.5 py-1.5 rounded-lg hover:bg-white/10 text-white transition-all cursor-pointer text-xs font-bold"
+                className="flex items-center space-x-1.5 px-3 py-2 border border-slate-200 dark:border-gray-800 rounded-xl hover:border-[#00b074] dark:hover:border-emerald-500 text-slate-700 dark:text-gray-300 transition-all cursor-pointer text-xs font-bold bg-white dark:bg-[#1c222b]"
                 title="Change Language"
               >
-                <Globe className="w-4 h-4 text-blue-100" />
-                <span className="text-sm">{LANGUAGES.find(l => l.code === lang)?.flag}</span>
-                <span className="hidden xs:inline text-xs tracking-wide">{LANGUAGES.find(l => l.code === lang)?.name}</span>
-                <ChevronDown className={`w-3 h-3 transition-transform duration-200 ${isLangOpen ? "rotate-180" : ""}`} />
+                <Globe className="w-3.5 h-3.5 text-[#00b074]" />
+                <span className="hidden xs:inline">{LANGUAGES.find(l => l.code === lang)?.name}</span>
+                <ChevronDown className={`w-3 h-3 text-slate-400 transition-transform duration-200 ${isLangOpen ? "rotate-180" : ""}`} />
               </button>
 
               <AnimatePresence>
                 {isLangOpen && (
-                  <>
+                   <>
                     {/* Backdrop click register to close */}
                     <div 
                       className="fixed inset-0 z-40 bg-transparent" 
@@ -784,8 +886,8 @@ export default function App() {
                           }}
                           className={`w-full px-3.5 py-2 text-left text-xs font-bold flex items-center space-x-2.5 transition-colors cursor-pointer border-0 bg-transparent ${
                             lang === item.code
-                              ? "bg-blue-50 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400"
-                              : "text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-[#1f242c]"
+                              ? "bg-emerald-50 dark:bg-emerald-950/40 text-[#00b074] dark:text-emerald-400"
+                              : "text-slate-700 dark:text-gray-300 hover:bg-slate-50 dark:hover:bg-[#1f242c]"
                           }`}
                         >
                           <span className="text-sm">{item.flag}</span>
@@ -801,7 +903,7 @@ export default function App() {
             {/* Hamburger Menu Icon */}
             <button
               onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-              className="p-1.5 rounded-lg hover:bg-white/10 text-white transition-colors block md:hidden cursor-pointer"
+              className="p-2 rounded-xl text-slate-500 hover:bg-slate-100 dark:hover:bg-gray-800 transition-colors block md:hidden cursor-pointer"
             >
               {mobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
             </button>
@@ -816,129 +918,253 @@ export default function App() {
             initial={{ opacity: 0, height: 0 }}
             animate={{ opacity: 1, height: "auto" }}
             exit={{ opacity: 0, height: 0 }}
-            className="md:hidden bg-blue-700 text-white border-b border-blue-900/40 overflow-hidden"
+            className="md:hidden bg-white dark:bg-[#161b22] border-b border-slate-100 dark:border-gray-800 overflow-hidden text-slate-800 dark:text-white"
           >
-            <div className="px-4 py-4 space-y-2">
+            <div className="px-4 py-4 space-y-2.5">
               <button 
-                onClick={() => { setMobileMenuOpen(false); setSelectedBlogSlug(null); setActiveModal(null); }}
-                className="block w-full text-left py-2 px-3 hover:bg-white/10 rounded-lg text-xs uppercase tracking-wider font-bold"
+                onClick={() => { setMobileMenuOpen(false); setSelectedBlogSlug(null); setActiveModal(null); window.scrollTo({ top: 0, behavior: "smooth" }); }}
+                className="block w-full text-left py-2 px-3 hover:bg-slate-50 dark:hover:bg-gray-800 rounded-xl text-xs font-bold"
               >
-                {t.title}
+                Home
               </button>
               <button 
-                onClick={() => { setMobileMenuOpen(false); setActiveModal("tools"); }}
-                className="block w-full text-left py-2 px-3 hover:bg-white/10 rounded-lg text-xs uppercase tracking-wider font-bold"
+                onClick={() => { 
+                  setMobileMenuOpen(false);
+                  const faqSec = document.getElementById("faq-section");
+                  if (faqSec) faqSec.scrollIntoView({ behavior: "smooth" });
+                }}
+                className="block w-full text-left py-2 px-3 hover:bg-slate-50 dark:hover:bg-gray-800 rounded-xl text-xs font-bold"
               >
-                {t.securityTools}
+                FAQ
               </button>
               <button 
-                onClick={() => { setMobileMenuOpen(false); setActiveModal("download"); }}
-                className="block w-full text-left py-2 px-3 hover:bg-white/10 rounded-lg text-xs uppercase tracking-wider font-bold"
+                onClick={() => { 
+                  setMobileMenuOpen(false);
+                  const blogSec = document.getElementById("blog-section");
+                  if (blogSec) blogSec.scrollIntoView({ behavior: "smooth" });
+                }}
+                className="block w-full text-left py-2 px-3 hover:bg-slate-50 dark:hover:bg-gray-800 rounded-xl text-xs font-bold"
               >
-                {t.appsAndExtensions}
+                Blog
+              </button>
+              <button 
+                onClick={() => { setMobileMenuOpen(false); setActiveModal("privacy"); }}
+                className="block w-full text-left py-2 px-3 hover:bg-slate-50 dark:hover:bg-gray-800 rounded-xl text-xs font-bold"
+              >
+                Privacy Policy
               </button>
               <button 
                 onClick={() => { setMobileMenuOpen(false); setActiveModal("contact"); }}
-                className="block w-full text-left py-2 px-3 hover:bg-white/10 rounded-lg text-xs uppercase tracking-wider font-bold"
+                className="block w-full text-left py-2 px-3 hover:bg-slate-50 dark:hover:bg-gray-800 rounded-xl text-xs font-bold"
               >
-                {t.contactUs}
+                Contact Us
               </button>
             </div>
           </motion.div>
         )}
       </AnimatePresence>
 
-      {/* MAIN SINGLE LANDING PAGE STRUCTURE */}
-      <main className="max-w-4xl mx-auto px-4 py-8 space-y-12">
-        
-        {/* 2. MAIN GENERATOR CARD SEGMENT */}
-        <div className="text-center space-y-3 max-w-2xl mx-auto">
-          <h1 className="text-3xl sm:text-4.5xl font-display font-black tracking-tight text-gray-900 dark:text-white">
-            {t.title}
-          </h1>
-          <p className="text-xs sm:text-sm text-gray-500 dark:text-gray-400 font-medium">
-            {t.subtitle}
-          </p>
-        </div>
-
-        {/* Email Field and Action Buttons Box */}
-        <div className="bg-white dark:bg-[#161b22] border border-gray-200 dark:border-gray-800 rounded-3xl p-6 sm:p-8 shadow-xl relative overflow-hidden">
+      {/* HERO HERO CONTAINER WITH BACKGROUND WAVING GRADIENT */}
+      <div className="relative overflow-hidden bg-gradient-to-b from-[#fafbfe] via-[#fafbfe] to-white dark:from-[#0d1117] dark:to-[#0b1329] pt-12 pb-6 px-4">
+        <div className="max-w-7xl mx-auto sm:px-6 lg:px-8 grid grid-cols-1 lg:grid-cols-2 gap-12 items-center">
           
-          <div className="space-y-6">
+          {/* Left Text Content Column */}
+          <div className="space-y-6 text-left">
+            <h1 className="text-4xl sm:text-5xl lg:text-5.5xl font-display font-black tracking-tight text-slate-900 dark:text-white leading-[1.15]">
+              Free Temporary Email <br />
+              Address <span className="text-[#00b074]">Generator</span>
+            </h1>
+
+            <p className="text-sm sm:text-base text-slate-500 dark:text-slate-400 font-medium max-w-xl leading-relaxed">
+              Protect your privacy and keep spam out of your inbox. Generate a secure, free temporary email address in seconds.
+            </p>
+
+            <div className="grid grid-cols-2 gap-y-3.5 gap-x-4 max-w-md pt-2">
+              {[
+                { text: "Instant Email" },
+                { text: "No Registration" },
+                { text: "100% Free" },
+                { text: "Secure & Private" }
+              ].map((feat, i) => (
+                <div key={i} className="flex items-center space-x-2">
+                  <div className="bg-[#eefbf6] dark:bg-emerald-950/35 p-1 rounded-full">
+                    <Check className="w-3.5 h-3.5 text-[#00b074] stroke-[3]" />
+                  </div>
+                  <span className="text-xs sm:text-sm font-semibold text-slate-700 dark:text-slate-300">{feat.text}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Right Visual Vector Illustration Column */}
+          <div className="flex items-center justify-center relative min-h-[300px] sm:min-h-[380px] select-none py-6 lg:py-0 overflow-visible">
+            {/* Outer soft glowing rings and grid */}
+            <div className="absolute inset-0 bg-radial from-emerald-500/5 to-transparent rounded-full blur-3xl scale-125" />
             
-            {/* Countdown and lifetime indicator removed per user request */}
+            <div className="relative w-full max-w-md h-full flex items-center justify-center">
+              {/* Dashed paths and orbits */}
+              <svg className="absolute w-[360px] h-[360px] text-emerald-500/20" viewBox="0 0 100 100">
+                <path d="M 10 50 Q 50 20 90 50" fill="none" stroke="currentColor" strokeWidth="0.5" strokeDasharray="2,2" />
+                <path d="M 10 50 Q 50 80 90 50" fill="none" stroke="currentColor" strokeWidth="0.5" strokeDasharray="2,2" />
+                <circle cx="50" cy="50" r="38" fill="none" stroke="currentColor" strokeWidth="0.2" />
+              </svg>
 
-            {/* Simulated Email Address Field */}
-            <div className="relative flex items-center bg-[#f8f9fa] dark:bg-[#0d1117] border border-gray-200 dark:border-gray-800 rounded-2xl p-4 sm:p-5 group">
-              <input
-                type="text"
-                readOnly
-                value={emailAddress || t.generatingMailbox}
-                onClick={copyToClipboard}
-                className="w-full bg-transparent text-center font-mono font-bold text-sm sm:text-lg text-gray-800 dark:text-white outline-none cursor-pointer tracking-wide"
-                title="Click to copy"
-                id="mail-address-input"
-              />
-              <button
-                onClick={copyToClipboard}
-                className="absolute right-4 p-2 bg-white dark:bg-[#161b22] border border-gray-200 dark:border-gray-800 text-gray-400 hover:text-blue-600 hover:border-blue-600 dark:hover:text-blue-400 rounded-xl transition-all shadow-sm cursor-pointer"
-                title="Copy email address"
-                id="copy-addr-inside-btn"
+              {/* Floating Orbit Node 1: Paper Airplane */}
+              <motion.div 
+                animate={{ y: [0, -10, 0] }}
+                transition={{ duration: 5, repeat: Infinity, ease: "easeInOut" }}
+                className="absolute top-10 left-12 bg-white dark:bg-[#161b22] border border-emerald-100 dark:border-gray-800 p-3.5 rounded-2xl shadow-lg text-[#00b074] z-10"
               >
-                {isCopied ? <Check className="w-4 h-4 text-emerald-500 stroke-[3]" /> : <Copy className="w-4 h-4" />}
-              </button>
+                <Send className="w-5 h-5 transform -rotate-12 stroke-[2.5]" />
+              </motion.div>
+
+              {/* Floating Orbit Node 2: Shield Check */}
+              <motion.div 
+                animate={{ y: [0, 12, 0] }}
+                transition={{ duration: 6, repeat: Infinity, ease: "easeInOut", delay: 1 }}
+                className="absolute top-8 right-10 bg-white dark:bg-[#161b22] border border-emerald-100 dark:border-gray-800 p-3.5 rounded-2xl shadow-lg text-[#00b074] z-10"
+              >
+                <ShieldCheck className="w-5 h-5 stroke-[2.5]" />
+              </motion.div>
+
+              {/* Floating Orbit Node 3: Avatar User */}
+              <motion.div 
+                animate={{ x: [0, 8, 0] }}
+                transition={{ duration: 5.5, repeat: Infinity, ease: "easeInOut", delay: 0.5 }}
+                className="absolute bottom-16 right-6 bg-white dark:bg-[#161b22] border border-emerald-100 dark:border-gray-800 p-3.5 rounded-2xl shadow-lg text-gray-400 z-10"
+              >
+                <User className="w-5 h-5 stroke-[2.5]" />
+              </motion.div>
+
+              {/* Main Envelope Element */}
+              <motion.div 
+                className="relative z-20 w-72 h-48 bg-[#00b074] rounded-3xl shadow-2xl flex flex-col justify-end p-6 border border-emerald-400/20 overflow-visible"
+                style={{ transformStyle: "preserve-3d", perspective: "1000px" }}
+                whileHover={{ scale: 1.03 }}
+              >
+                {/* Sliding Letter */}
+                <motion.div 
+                  animate={{ y: [0, -22, 0] }}
+                  transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }}
+                  className="absolute bottom-16 left-6 right-6 h-40 bg-white dark:bg-gray-800 rounded-2xl shadow-lg border border-gray-100 dark:border-gray-700 p-4 flex flex-col space-y-2.5 z-10 origin-bottom"
+                >
+                  <div className="w-12 h-2.5 bg-[#00b074]/20 rounded-full" />
+                  <div className="w-full h-2 bg-gray-100 dark:bg-gray-700 rounded-full" />
+                  <div className="w-5/6 h-2 bg-gray-100 dark:bg-gray-700 rounded-full" />
+                  <div className="w-4/5 h-2 bg-gray-100 dark:bg-gray-700 rounded-full" />
+                  <div className="w-3/4 h-2 bg-gray-100 dark:bg-gray-700 rounded-full" />
+                </motion.div>
+
+                {/* Envelope Front Flaps and Body Overlay to sandwich the letter */}
+                <div className="absolute inset-0 bg-gradient-to-tr from-[#009b64] to-[#00b074] rounded-3xl z-20 flex flex-col justify-end p-6 shadow-inner pointer-events-none">
+                  {/* Mail line mock design */}
+                  <div className="w-1/2 h-1.5 bg-white/20 rounded-full mb-1" />
+                  <div className="w-1/3 h-1.5 bg-white/10 rounded-full" />
+                </div>
+
+                {/* Padlock Shield layered directly in front */}
+                <motion.div 
+                  animate={{ scale: [1, 1.04, 1] }}
+                  transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }}
+                  className="absolute -bottom-6 left-1/2 transform -translate-x-1/2 z-30 bg-[#00a068] text-white py-3.5 px-4.5 rounded-2xl shadow-xl border-2 border-white flex items-center justify-center space-x-1"
+                >
+                  <Lock className="w-6 h-6 stroke-[2.5]" />
+                </motion.div>
+              </motion.div>
             </div>
+          </div>
 
-            {/* ACTION BUTTONS ROW */}
-            <div className="grid grid-cols-4 gap-2 sm:gap-3.5 text-center pt-2">
-              <button
-                onClick={copyToClipboard}
-                className="flex flex-col items-center justify-center p-2.5 sm:p-5 rounded-2xl border border-gray-200 dark:border-gray-800 bg-[#fbfbfb] dark:bg-[#1c222b] hover:border-blue-600 dark:hover:border-blue-500 hover:text-blue-600 dark:hover:text-blue-400 cursor-pointer transition-all shadow-sm hover:shadow-md"
-                id="action-btn-copy"
-                title="Copy address to clipboard"
-              >
-                <Copy className="w-5 h-5 mb-1.5" />
-                <span className="text-[10px] sm:text-[11px] font-extrabold font-sans uppercase tracking-wider block">
-                  {isCopied ? t.copied : t.copy}
-                </span>
-              </button>
+        </div>
+      </div>
 
-              <button
-                onClick={() => setActiveModal("qrcode")}
-                className="flex flex-col items-center justify-center p-2.5 sm:p-5 rounded-2xl border border-gray-200 dark:border-gray-800 bg-[#fbfbfb] dark:bg-[#1c222b] hover:border-blue-600 dark:hover:border-blue-500 hover:text-blue-600 dark:hover:text-blue-400 cursor-pointer transition-all shadow-sm hover:shadow-md"
-                id="action-btn-qrcode"
-                title="Display QR code of active email address"
-              >
-                <QrCode className="w-5 h-5 mb-1.5 text-gray-500 dark:text-gray-400 group-hover:text-blue-600 dark:group-hover:text-blue-400" />
-                <span className="text-[10px] sm:text-[11px] font-extrabold font-sans uppercase tracking-wider block">QR Code</span>
-              </button>
+      {/* MAIN SINGLE LANDING PAGE STRUCTURE */}
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-16">
+        
+        {/* 2. MAIN GENERATOR CARD SEGMENT (MOCKUP ACCURATE OVERLAPPING CARD) */}
+        <div className="max-w-3xl mx-auto -mt-16 sm:-mt-24 relative z-30">
+          <div className="bg-white dark:bg-[#161b22] border border-slate-150 dark:border-gray-800 rounded-3xl p-6 sm:p-8 shadow-2xl transition-all hover:shadow-emerald-500/5 duration-300">
+            <h2 className="text-center font-display font-black text-slate-800 dark:text-white text-base tracking-wider uppercase mb-5">
+              Your Temporary Email Address
+            </h2>
 
-              <button
-                onClick={() => generateNewMailbox()}
-                className="flex flex-col items-center justify-center p-2.5 sm:p-5 rounded-2xl border border-gray-200 dark:border-gray-800 bg-[#fbfbfb] dark:bg-[#1c222b] hover:border-blue-600 dark:hover:border-blue-500 hover:text-blue-600 dark:hover:text-blue-400 cursor-pointer transition-all shadow-sm hover:shadow-md"
-                id="action-btn-change"
-                title="Generate new temporary mailbox"
-              >
-                <RefreshCw className="w-5 h-5 mb-1.5" />
-                <span className="text-[10px] sm:text-[11px] font-extrabold font-sans uppercase tracking-wider block">{t.change}</span>
-              </button>
+            <div className="space-y-4">
+              {/* Row: Soft green icon -> Input address -> Copy -> New Email */}
+              <div className="flex flex-col md:flex-row items-stretch gap-3">
+                {/* Simulated Email address field with badge on left */}
+                <div className="flex-1 flex items-center bg-[#f8f9fa] dark:bg-[#0d1117] border border-slate-200 dark:border-gray-800 rounded-2xl p-2.5 sm:p-3 focus-within:border-[#00b074] dark:focus-within:border-emerald-500 transition-colors">
+                  <div className="bg-[#eefbf6] dark:bg-emerald-950/40 text-[#00b074] p-2 rounded-xl shrink-0 mr-3 hidden sm:flex items-center justify-center">
+                    <Mail className="w-4 h-4 stroke-[2.5]" />
+                  </div>
+                  <input
+                    type="text"
+                    readOnly
+                    value={emailAddress || t.generatingMailbox}
+                    onClick={copyToClipboard}
+                    className="flex-1 bg-transparent text-left font-sans font-semibold text-sm sm:text-base text-slate-800 dark:text-white outline-none cursor-pointer tracking-wide px-1 py-1"
+                    title="Click to copy"
+                    id="mail-address-input"
+                  />
+                </div>
 
-              <button
-                onClick={handleDeleteAddress}
-                className="flex flex-col items-center justify-center p-2.5 sm:p-5 rounded-2xl border border-gray-200 dark:border-gray-800 bg-[#fbfbfb] dark:bg-[#1c222b] hover:border-red-500 hover:text-red-500 cursor-pointer transition-all shadow-sm hover:shadow-md"
-                id="action-btn-delete"
-                title="Delete current address"
-              >
-                <Trash2 className="w-5 h-5 mb-1.5" />
-                <span className="text-[10px] sm:text-[11px] font-extrabold font-sans uppercase tracking-wider block">{t.delete}</span>
-              </button>
+                {/* Action Buttons styled exactly like mockup */}
+                <div className="flex items-center gap-2.5">
+                  <button
+                    onClick={copyToClipboard}
+                    className="flex-1 md:flex-none flex items-center justify-center space-x-2 px-5 py-3.5 border border-slate-200 dark:border-gray-800 rounded-2xl hover:border-[#00b074] dark:hover:border-emerald-500 hover:text-[#00b074] dark:hover:text-emerald-400 bg-white dark:bg-[#1c222b] text-slate-700 dark:text-gray-300 font-extrabold text-sm uppercase tracking-wider cursor-pointer transition-all shadow-sm active:scale-95"
+                    title="Copy address to clipboard"
+                    id="action-btn-copy"
+                  >
+                    <Copy className="w-4 h-4 text-slate-400" />
+                    <span>{isCopied ? t.copied : t.copy}</span>
+                  </button>
+
+                  <button
+                    onClick={() => generateNewMailbox()}
+                    className="flex-2 md:flex-none flex items-center justify-center space-x-2 px-6 py-3.5 bg-[#00b074] hover:bg-[#009b64] text-white font-extrabold text-sm uppercase tracking-wider rounded-2xl shadow-md hover:shadow-lg hover:shadow-emerald-500/10 active:scale-95 transition-all cursor-pointer border-0"
+                    title="Generate new temporary mailbox"
+                    id="action-btn-change"
+                  >
+                    <RefreshCw className="w-4 h-4" />
+                    <span>New Email</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Card Subtitle and Optional Power Actions Underneath */}
+              <div className="flex flex-col sm:flex-row items-center justify-between pt-1 text-xs gap-3">
+                <div className="flex items-center space-x-1.5 text-slate-400 dark:text-gray-400 font-medium">
+                  <ShieldCheck className="w-4 h-4 text-[#00b074]" />
+                  <span>This email will expire automatically.</span>
+                </div>
+
+                {/* Perfectly integrated secondary actions for power users (QR Code & Delete Address) */}
+                <div className="flex items-center space-x-4">
+                  <button
+                    onClick={() => setActiveModal("qrcode")}
+                    className="text-slate-400 hover:text-[#00b074] dark:hover:text-emerald-400 font-bold transition-colors flex items-center space-x-1 cursor-pointer bg-transparent border-0"
+                    title="Display QR Code"
+                  >
+                    <QrCode className="w-3.5 h-3.5" />
+                    <span>QR Code</span>
+                  </button>
+                  <span className="text-gray-200 dark:text-gray-800">|</span>
+                  <button
+                    onClick={handleDeleteAddress}
+                    className="text-slate-400 hover:text-red-500 font-bold transition-colors flex items-center space-x-1 cursor-pointer bg-transparent border-0"
+                    title="Delete mailbox address"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                    <span>{t.delete}</span>
+                  </button>
+                </div>
+              </div>
+
             </div>
-
           </div>
         </div>
 
         {/* 3. INTERACTIVE MESSAGES / SAVED PANEL */}
-        <div className="bg-white dark:bg-[#161b22] border border-gray-200 dark:border-gray-800 rounded-3xl p-6 sm:p-8 shadow-xl">
+        <div className="bg-white dark:bg-[#161b22] border border-slate-150 dark:border-gray-800 rounded-3xl p-6 sm:p-8 shadow-sm">
           
           {/* Tabs and Actions Row */}
           <div className="flex items-center justify-between border-b border-gray-100 dark:border-gray-800 pb-4">
@@ -947,8 +1173,8 @@ export default function App() {
                 onClick={() => { setActiveTab("messages"); setSelectedMessage(null); }}
                 className={`px-4.5 py-2 rounded-xl text-xs sm:text-sm font-bold tracking-tight transition-all cursor-pointer ${
                   activeTab === "messages"
-                    ? "bg-blue-600 text-white shadow-md shadow-blue-500/10"
-                    : "text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-850"
+                    ? "bg-[#00b074] text-white shadow-md shadow-emerald-500/10"
+                    : "text-slate-500 hover:bg-slate-50 dark:hover:bg-gray-850"
                 }`}
               >
                 {t.messages}
@@ -957,21 +1183,47 @@ export default function App() {
                 onClick={() => { setActiveTab("saved"); setSelectedMessage(null); }}
                 className={`px-4.5 py-2 rounded-xl text-xs sm:text-sm font-bold tracking-tight transition-all cursor-pointer ${
                   activeTab === "saved"
-                    ? "bg-blue-600 text-white shadow-md shadow-blue-500/10"
-                    : "text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-850"
+                    ? "bg-[#00b074] text-white shadow-md shadow-emerald-500/10"
+                    : "text-slate-500 hover:bg-slate-50 dark:hover:bg-gray-850"
                 }`}
               >
                 {t.saved} ({savedMessages.length})
               </button>
             </div>
 
-            <button
-              onClick={() => fetchInbox(false)}
-              className="text-xs font-semibold text-blue-600 dark:text-blue-400 hover:text-blue-500 flex items-center space-x-1 hover:underline cursor-pointer bg-transparent border-0"
-            >
-              <RefreshCw className={`w-3.5 h-3.5 ${isRefreshing ? "animate-spin text-amber-500" : ""}`} />
-              <span>{t.refresh}</span>
-            </button>
+            <div className="flex items-center space-x-4">
+              <button
+                onClick={() => {
+                  const nextVal = !soundEnabled;
+                  setSoundEnabled(nextVal);
+                  if (nextVal) {
+                    playNotificationSound();
+                  }
+                }}
+                className="text-xs font-semibold text-slate-500 dark:text-gray-400 hover:text-[#00b074] dark:hover:text-emerald-400 flex items-center space-x-1.5 cursor-pointer bg-transparent border-0"
+                title={soundEnabled ? "Mute notification sound" : "Unmute notification sound"}
+              >
+                {soundEnabled ? (
+                  <>
+                    <Volume2 className="w-3.5 h-3.5 text-emerald-500" />
+                    <span>Sound On</span>
+                  </>
+                ) : (
+                  <>
+                    <VolumeX className="w-3.5 h-3.5 text-rose-400" />
+                    <span>Sound Off</span>
+                  </>
+                )}
+              </button>
+
+              <button
+                onClick={() => fetchInbox(false)}
+                className="text-xs font-semibold text-[#00b074] dark:text-emerald-400 hover:text-[#00b074] flex items-center space-x-1 hover:underline cursor-pointer bg-transparent border-0"
+              >
+                <RefreshCw className={`w-3.5 h-3.5 ${isRefreshing ? "animate-spin text-amber-500" : ""}`} />
+                <span>{t.refresh}</span>
+              </button>
+            </div>
           </div>
 
           {/* Tab Content Display */}
@@ -985,7 +1237,7 @@ export default function App() {
                 <div className="flex items-center justify-between border-b border-gray-100 dark:border-gray-800 pb-4">
                   <button
                     onClick={() => setSelectedMessage(null)}
-                    className="px-3.5 py-2 text-xs font-bold bg-[#f0f4ff] dark:bg-[#1e293b] hover:bg-blue-100 text-blue-600 dark:text-blue-300 rounded-xl flex items-center gap-1 transition-all cursor-pointer border-0"
+                    className="px-3.5 py-2 text-xs font-bold bg-emerald-50 dark:bg-[#1e293b] hover:bg-emerald-100/60 text-[#00b074] dark:text-emerald-300 rounded-xl flex items-center gap-1 transition-all cursor-pointer border-0"
                   >
                     <ChevronDown className="w-4 h-4 rotate-90" />
                     <span>{t.backToInbox}</span>
@@ -1036,9 +1288,9 @@ export default function App() {
                             href={`/api/download-attachment?login=${username}&domain=${activeDomain}&downloadUrl=${encodeURIComponent(file.downloadUrl || "")}`}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="px-2.5 py-1.5 bg-white dark:bg-[#161b22] border border-gray-200 dark:border-gray-850 text-xs font-mono rounded-lg hover:border-blue-600 text-gray-700 dark:text-gray-300 flex items-center gap-1"
+                            className="px-2.5 py-1.5 bg-white dark:bg-[#161b22] border border-gray-200 dark:border-gray-850 text-xs font-mono rounded-lg hover:border-[#00b074] text-gray-700 dark:text-gray-300 flex items-center gap-1"
                           >
-                            <Download className="w-3 h-3 text-blue-600 dark:text-blue-400" />
+                            <Download className="w-3 h-3 text-[#00b074] dark:text-emerald-400" />
                             <span>{file.filename}</span>
                             <span className="text-[10px] text-gray-400">({(file.size / 1024).toFixed(1)} KB)</span>
                           </a>
@@ -1052,7 +1304,7 @@ export default function App() {
                 <div>
                   {isLoadingContent ? (
                     <div className="py-12 flex flex-col items-center justify-center space-y-3">
-                      <div className="w-8 h-8 rounded-full border-4 border-blue-100 border-t-blue-600 animate-spin" />
+                      <div className="w-8 h-8 rounded-full border-4 border-emerald-100 border-t-[#00b074] animate-spin" />
                       <span className="text-xs font-bold text-gray-400">{t.loadingPayload}</span>
                     </div>
                   ) : (
@@ -1105,7 +1357,7 @@ export default function App() {
                         <div
                           key={msg.id}
                           onClick={() => handleReadMessage(msg.id)}
-                          className="py-4 px-3 hover:bg-blue-50/20 dark:hover:bg-blue-950/10 cursor-pointer flex items-center justify-between transition-colors rounded-xl"
+                          className="py-4 px-3 hover:bg-emerald-50/10 dark:hover:bg-emerald-950/5 cursor-pointer flex items-center justify-between transition-colors rounded-xl"
                         >
                           <div className="flex-1 min-w-0 pr-4">
                             <div className="flex items-center justify-between text-xs font-medium text-gray-500 mb-1">
@@ -1121,10 +1373,71 @@ export default function App() {
                   ) : (
                     /* Waiting Spinner Area */
                     <div className="py-12 text-center space-y-4 max-w-md mx-auto">
-                      <div className="relative w-14 h-14 mx-auto flex items-center justify-center">
-                        <div className="absolute inset-0 rounded-full border-4 border-blue-100 dark:border-blue-950/20" />
-                        <div className="absolute inset-0 rounded-full border-4 border-t-blue-600 dark:border-t-blue-400 animate-spin" />
-                        <Mail className="w-5 h-5 text-blue-600 dark:text-blue-400" />
+                      <div className="relative w-36 h-28 mx-auto flex items-end justify-center overflow-visible pb-2 select-none">
+                        {/* Glowing radial backdrop */}
+                        <div className="absolute inset-0 bg-emerald-500/5 rounded-full blur-xl animate-pulse" />
+                        
+                        {/* Pulsating outer rings */}
+                        <motion.div 
+                          animate={{ scale: [1, 1.12, 1], opacity: [0.3, 0.6, 0.3] }}
+                          transition={{ duration: 3, repeat: Infinity, ease: "easeInOut" }}
+                          className="absolute inset-0 rounded-full border border-emerald-100 dark:border-emerald-950/30"
+                        />
+                        
+                        {/* Realistic Envelope Body */}
+                        <div className="relative w-28 h-18 bg-[#00b074] rounded-2xl shadow-lg border border-emerald-400/20 flex flex-col justify-end p-3 overflow-visible">
+                          
+                          {/* Sliding Letter peeking out */}
+                          <motion.div 
+                            animate={{ y: [0, -14, 0] }}
+                            transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }}
+                            className="absolute bottom-8 left-3 right-3 h-16 bg-white dark:bg-[#161b22] rounded-xl shadow-md border border-slate-100 dark:border-gray-800 p-2 flex flex-col space-y-1.5 z-10 origin-bottom"
+                          >
+                            <div className="w-6 h-1.5 bg-[#00b074]/30 rounded-full" />
+                            <div className="w-full h-1 bg-slate-100 dark:bg-gray-800 rounded-full" />
+                            <div className="w-4/5 h-1 bg-slate-100 dark:bg-gray-800 rounded-full" />
+                            <div className="w-2/3 h-1 bg-slate-100 dark:bg-gray-800 rounded-full" />
+                          </motion.div>
+
+                          {/* Envelope Flap sandwiching the letter */}
+                          <div className="absolute inset-0 bg-gradient-to-tr from-[#009b64] to-[#00b074] rounded-2xl z-20 flex flex-col justify-end p-3 shadow-inner pointer-events-none">
+                            <div className="w-1/2 h-1 bg-white/20 rounded-full mb-0.5" />
+                            <div className="w-1/3 h-1 bg-white/10 rounded-full" />
+                          </div>
+
+                          {/* Central Mini Lock badge in front */}
+                          <motion.div 
+                            animate={{ scale: [1, 1.05, 1] }}
+                            transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }}
+                            className="absolute -bottom-2.5 left-1/2 transform -translate-x-1/2 z-30 bg-[#00a068] text-white p-1 rounded-lg shadow-md border border-white flex items-center justify-center"
+                          >
+                            <Lock className="w-3.5 h-3.5 stroke-[2.5]" />
+                          </motion.div>
+                        </div>
+
+                        {/* Floating elements ("small whatever") */}
+                        <motion.div 
+                          animate={{ scale: [0.8, 1.2, 0.8], x: [0, 4, 0], y: [0, -4, 0] }}
+                          transition={{ duration: 3.5, repeat: Infinity, ease: "easeInOut" }}
+                          className="absolute top-2 right-4 w-2.5 h-2.5 rounded-full bg-emerald-400"
+                        />
+                        <motion.div 
+                          animate={{ scale: [1.2, 0.8, 1.2], x: [0, -3, 0], y: [0, 3, 0] }}
+                          transition={{ duration: 4.2, repeat: Infinity, ease: "easeInOut" }}
+                          className="absolute bottom-1 -left-1 w-2 h-2 rounded-full bg-emerald-300 dark:bg-emerald-500"
+                        />
+                        <motion.div 
+                          animate={{ opacity: [0.2, 0.8, 0.2] }}
+                          transition={{ duration: 2.8, repeat: Infinity, ease: "easeInOut" }}
+                          className="absolute top-6 left-2 w-1.5 h-1.5 rounded-full bg-blue-400"
+                        />
+                        <motion.div 
+                          animate={{ y: [0, -6, 0] }}
+                          transition={{ duration: 5, repeat: Infinity, ease: "easeInOut" }}
+                          className="absolute -top-3 left-1/3 text-[#00b074]/60"
+                        >
+                          <Send className="w-3.5 h-3.5 transform -rotate-12 stroke-[2.5]" />
+                        </motion.div>
                       </div>
                       <div className="space-y-1">
                         <h4 className="font-display font-extrabold text-sm sm:text-base text-gray-900 dark:text-white">{t.waitingForEmails}</h4>
@@ -1140,7 +1453,7 @@ export default function App() {
                         <div
                           key={msg.id}
                           onClick={() => handleReadMessage(msg.id)}
-                          className="py-4 px-3 hover:bg-blue-50/20 dark:hover:bg-blue-950/10 cursor-pointer flex items-center justify-between transition-colors rounded-xl"
+                          className="py-4 px-3 hover:bg-emerald-50/10 dark:hover:bg-emerald-950/5 cursor-pointer flex items-center justify-between transition-colors rounded-xl"
                         >
                           <div className="flex-1 min-w-0 pr-4">
                             <div className="flex items-center space-x-2">
@@ -1187,128 +1500,69 @@ export default function App() {
           </div>
         </div>
 
-        {/* DEVELOPER API DIAGNOSTICS CONSOLE */}
-        <div className="bg-white dark:bg-[#161b22] border border-gray-200 dark:border-gray-800 rounded-3xl p-6 sm:p-8 shadow-xl space-y-5">
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-            <div className="flex items-center space-x-3">
-              <div className="relative flex h-3 w-3">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                <span className="relative inline-flex rounded-full h-3 w-3 bg-emerald-500"></span>
-              </div>
-              <div>
-                <h3 className="font-display font-black text-sm sm:text-base text-gray-900 dark:text-white uppercase tracking-wider flex items-center gap-2">
-                  <span>API Response & Fetch Diagnostics</span>
-                  <span className="px-2 py-0.5 text-[9px] bg-blue-100 dark:bg-blue-950 text-blue-600 dark:text-blue-300 rounded-full font-mono normal-case">Developer Console</span>
-                </h3>
-                <p className="text-[11px] text-gray-400 font-medium font-sans">
-                  Monitor live `/api/messages` payloads, server statuses, and Firestore failovers.
-                </p>
-              </div>
-            </div>
 
-            <div className="flex flex-wrap items-center gap-2">
-              <button
-                onClick={() => {
-                  const logString = apiLogs.map(l => `[${l.timestamp}] [${l.type.toUpperCase()}] ${l.message} ${l.data ? '\nPayload: ' + JSON.stringify(l.data, null, 2) : ''}`).join('\n\n');
-                  navigator.clipboard.writeText(logString);
-                  alert("Diagnostic log bundle copied to clipboard!");
-                }}
-                className="px-3 py-1.5 bg-gray-100 dark:bg-[#0d1117] hover:bg-gray-200 dark:hover:bg-gray-800 text-gray-600 dark:text-gray-300 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer border border-gray-200 dark:border-gray-800"
-                title="Copy all logs to clipboard as text"
-              >
-                <Copy className="w-3.5 h-3.5" />
-                <span>Copy Bundle</span>
-              </button>
-
-              <button
-                onClick={() => {
-                  setApiLogs([]);
-                  addDiagnosticLog("info", "Diagnostics history cleared by developer.");
-                }}
-                className="px-3 py-1.5 bg-rose-50 dark:bg-rose-950/20 hover:bg-rose-100 dark:hover:bg-rose-950/40 text-rose-600 dark:text-rose-400 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer border border-rose-100 dark:border-rose-900/30"
-              >
-                <Trash2 className="w-3.5 h-3.5" />
-                <span>Clear Console</span>
-              </button>
-
-              <button
-                onClick={() => fetchInbox(false)}
-                className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer shadow-md shadow-blue-500/10 border-0"
-              >
-                <RefreshCw className={`w-3.5 h-3.5 ${isRefreshing ? "animate-spin" : ""}`} />
-                <span>Trigger Fetch</span>
-              </button>
-
-              <button
-                onClick={() => setShowDiagnostics(!showDiagnostics)}
-                className="p-2 bg-gray-100 dark:bg-[#0d1117] hover:bg-gray-200 dark:hover:bg-gray-800 text-gray-500 rounded-xl transition-all cursor-pointer border border-gray-200 dark:border-gray-800"
-              >
-                {showDiagnostics ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-              </button>
-            </div>
+        {/* BENTO GRID: WHY USE TEMP MAIL */}
+        <div className="space-y-6 pt-2">
+          <div className="text-center max-w-xl mx-auto space-y-2">
+            <h2 className="font-display font-black text-2xl sm:text-3xl text-slate-900 dark:text-white tracking-tight">
+              Why use Temp-Mail-Generator<span className="text-[#00b074]">.site</span>?
+            </h2>
+            <p className="text-sm text-slate-500 dark:text-slate-400 font-medium leading-relaxed">
+              We provide a fast, secure, and hassle-free temporary email service designed to protect your identity.
+            </p>
           </div>
 
-          {showDiagnostics && (
-            <motion.div
-              initial={{ opacity: 0, height: 0 }}
-              animate={{ opacity: 1, height: "auto" }}
-              exit={{ opacity: 0, height: 0 }}
-              className="space-y-3 overflow-hidden"
-            >
-              {/* Terminal screen */}
-              <div className="bg-[#0d1117] border border-gray-800 rounded-2xl p-4 font-mono text-xs text-gray-300 max-h-80 overflow-y-auto space-y-2.5 shadow-inner">
-                {apiLogs.length === 0 ? (
-                  <div className="py-8 text-center text-gray-500 space-y-1.5">
-                    <p className="font-semibold text-gray-400">⚡ Developer console is idle</p>
-                    <p className="text-[10px]">No API fetch has been recorded yet in this session. Pull to refresh or wait for automatic polling.</p>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+            {[
+              {
+                title: "Instant Emails",
+                desc: "Get a temporary email address instantly. No waiting, no signup required.",
+                icon: Mail,
+                color: "text-[#00b074] bg-[#eefbf6] dark:bg-emerald-950/40"
+              },
+              {
+                title: "Protect Your Privacy",
+                desc: "Keep your personal email private and protect yourself from spam and trackers.",
+                icon: Shield,
+                color: "text-blue-500 bg-blue-50 dark:bg-blue-950/40"
+              },
+              {
+                title: "Auto Delete",
+                desc: "All received emails and addresses are automatically deleted after a short time.",
+                icon: Clock,
+                color: "text-amber-500 bg-amber-50 dark:bg-amber-950/40"
+              },
+              {
+                title: "100% Free",
+                desc: "Our temporary email service is completely free with no hidden charges.",
+                icon: Lock,
+                color: "text-indigo-500 bg-indigo-50 dark:bg-indigo-950/40"
+              }
+            ].map((card, idx) => (
+              <div 
+                key={idx} 
+                className="bg-white dark:bg-[#161b22] border border-slate-150 dark:border-gray-800 rounded-3xl p-6 shadow-sm hover:shadow-md transition-all hover:-translate-y-1 duration-300 flex flex-col justify-between"
+              >
+                <div className="space-y-4">
+                  <div className={`${card.color} w-10 h-10 rounded-2xl flex items-center justify-center`}>
+                    <card.icon className="w-5 h-5 stroke-[2.5]" />
                   </div>
-                ) : (
-                  apiLogs.map((log) => {
-                    const isExpanded = expandedLogIds[log.id] || false;
-                    return (
-                      <div key={log.id} className="border-b border-gray-800/50 pb-2.5 last:border-0 last:pb-0">
-                        <div className="flex items-start gap-2">
-                          <span className="text-gray-500 shrink-0 select-none">[{log.timestamp}]</span>
-                          
-                          <span className={`px-1.5 py-0.5 rounded text-[10px] uppercase font-bold tracking-wider shrink-0 select-none ${
-                            log.type === "success" ? "bg-emerald-950 text-emerald-400 border border-emerald-900" :
-                            log.type === "error" ? "bg-rose-950 text-rose-400 border border-rose-900" :
-                            log.type === "warning" ? "bg-amber-950/50 text-amber-400 border border-amber-900/30" :
-                            "bg-blue-950 text-blue-400 border border-blue-900"
-                          }`}>
-                            {log.type}
-                          </span>
-
-                          <span className="text-gray-100 flex-1 break-all select-all">{log.message}</span>
-
-                          {log.data && (
-                            <button
-                              onClick={() => setExpandedLogIds(prev => ({ ...prev, [log.id]: !isExpanded }))}
-                              className="px-2 py-0.5 bg-gray-800 hover:bg-gray-700 text-gray-300 rounded text-[10px] font-bold cursor-pointer transition-colors border border-gray-700 shrink-0"
-                            >
-                              {isExpanded ? "Close" : "Inspect Payload"}
-                            </button>
-                          )}
-                        </div>
-
-                        {log.data && isExpanded && (
-                          <div className="mt-2.5 pl-4 border-l-2 border-blue-500/30">
-                            <pre className="p-3 bg-[#161b22] text-amber-300 rounded-xl overflow-x-auto text-[11px] border border-gray-800 leading-relaxed font-mono select-text">
-                              {JSON.stringify(log.data, null, 2)}
-                            </pre>
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })
-                )}
+                  <h3 className="font-display font-black text-base text-slate-800 dark:text-white tracking-tight">
+                    {card.title}
+                  </h3>
+                  <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 font-medium leading-relaxed">
+                    {card.desc}
+                  </p>
+                </div>
               </div>
-            </motion.div>
-          )}
+            ))}
+          </div>
         </div>
 
+
+
         {/* 4. EDUCATIONAL ARTICLE */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 items-center bg-white dark:bg-[#161b22] rounded-3xl p-6 sm:p-10 border border-gray-200 dark:border-gray-800">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 items-center bg-white dark:bg-[#161b22] rounded-3xl p-6 sm:p-10 border border-slate-150 dark:border-gray-800 shadow-sm">
           <div className="space-y-5">
             <h2 className="text-2xl sm:text-3.5xl font-display font-black text-gray-900 dark:text-white leading-tight">
               {lang === "en" && "What is disposable temporary email?"}
@@ -1326,78 +1580,60 @@ export default function App() {
                 {lang === "fr" && "L'e-mail temporaire jetable protège votre adresse e-mail réelle contre le spam, les publipostages publicitaires et les logiciels malveillants. Il est anonyme, éphémère et 100 % gratuit. Tous les e-mails et répertoires sont automatiquement détruits à l'expiration du minuteur de session ou en cliquant sur 'Supprimer' pour garantir le secret absolu de votre identité."}
               </p>
               <p>
-                {lang === "en" && "It is also called 'throwaway email', '3 minute mail', 'tempmail', 'trash mail' and 'fake mail'."}
-                {lang === "es" && "También se le llama 'correo de usar y tirar', 'correo de 3 minutos', 'correo temporal', 'correo basura' y 'correo falso'."}
-                {lang === "zh" && "它也被称为“抛弃式邮箱”、“3分钟邮箱”、“临时邮箱”、“垃圾邮箱”和“虚假邮箱”。"}
-                {lang === "hi" && "इसे 'थ्रोअवे ईमेल', '3 मिनट मेल', 'टेम्पमेल', 'ट्रैश मेल' और 'फेक मेल' भी कहा जाता है।"}
-                {lang === "fr" && "Il est également appelé 'e-mail jetable', 'e-mail de 3 minutes', 'tempmail', 'courrier poubelle' et 'faux e-mail'."}
-              </p>
-              <p>
                 {lang === "en" && "Temporary email can be used to hide your real email: social networks, download files from file hosting, public Wi-Fi spots, blogs and forums require users to complete registration until they can fully use their website."}
                 {lang === "es" && "El correo temporal se puede utilizar para ocultar su correo real: las redes sociales, la descarga de archivos de alojamiento de archivos, los puntos Wi-Fi públicos, los blogs y los foros requieren que los usuarios completen el registro antes de poder utilizar plenamente su sitio web."}
                 {lang === "zh" && "临时电子邮件可用于隐藏您的真实电子邮件：社交网络、文件托管下载服务、公共 Wi-Fi 热点、博客和论坛等，都要求用户在完全使用其网站之前完成注册。"}
-                {lang === "hi" && "अस्थायी ईमेल का उपयोग आपके वास्तविक ईमेल को छिपाने के लिए किया जा सकता है: सोशल नेटवर्क, फ़ाइल होस्टिंग से फ़ाइलें डाउनलोड करना, सार्वजनिक वाई-फाई स्पॉट, ब्लॉग और फ़ोरम पर जब तक उपयोगकर्ता पंजीकरण पूरा नहीं करते तब तक वे उनकी वेबसाइट का पूर्ण उपयोग नहीं कर सकते।"}
-                {lang === "fr" && "L'e-mail temporaire peut être utilisé pour masquer votre véritable e-mail : les réseaux sociaux, le téléchargement de fichiers à partir d'hébergeurs, les points Wi-Fi publics, les blogs et les forums obligent les utilisateurs à s'inscrire pour pouvoir utiliser pleinement leur site Web."}
+                {lang === "hi" && "अस्थायी ईमेल का उपयोग आपके वास्तविक ईमेल को छिपाने के लिए किया जा सकता है: सोशल नेटवर्क, फ़ाइल होस्टिंग से फ़ाइलें डाउनलोड करना, सार्वजनिक वाई-फाई स्पॉट, ब्लॉग और फ़ोरम उपयोगकर्ताओं को उनकी वेबसाइट का पूरी तरह से उपयोग करने से पहले पंजीकरण पूरा करने की आवश्यकता होती है।"}
+                {lang === "fr" && "L'e-mail temporaire peut être utilisé pour masquer votre e-mail réel : les réseaux sociaux, le téléchargement de fichiers à partir d'hébergeurs de fichiers, les points Wi-Fi publics, les blogs et les forums obligent les utilisateurs à s'inscrire avant de pouvoir utiliser pleinement leur site Web."}
               </p>
             </div>
           </div>
 
-          {/* How to Use Visual Card */}
-          <div className="relative rounded-3xl overflow-hidden border border-gray-250 dark:border-gray-800 bg-[#fbfcfd] dark:bg-[#161b22] flex flex-col justify-between p-5 group shadow-md">
-            <div className="aspect-video w-full rounded-2xl overflow-hidden bg-gray-100 dark:bg-gray-800 relative mb-4">
-              <img
-                src="https://images.unsplash.com/photo-1557200134-90327ee9fafa?auto=format&fit=crop&w=600&q=80"
-                alt="How to use Temporary Email Generator"
-                className="w-full h-full object-cover group-hover:scale-102 transition-transform duration-300"
-                referrerPolicy="no-referrer"
-              />
-            </div>
-            <div className="space-y-3.5">
-              <span className="bg-blue-100 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400 px-2.5 py-1 rounded-lg text-[10px] uppercase tracking-wider font-extrabold block w-fit">
-                {lang === "en" && "Quick Start Guide"}
-                {lang === "es" && "Guía de Inicio Rápido"}
-                {lang === "zh" && "快速入门指南"}
-                {lang === "hi" && "त्वरित प्रारंभ मार्गदर्शिका"}
-                {lang === "fr" && "Guide de démarrage rapide"}
-              </span>
-              <h3 className="font-display font-black text-sm text-gray-900 dark:text-white">
-                {lang === "en" && "How to protect your digital inbox"}
-                {lang === "es" && "Cómo proteger su bandeja de entrada digital"}
-                {lang === "zh" && "如何保护您的数字收件箱"}
-                {lang === "hi" && "अपने डिजिटल इनबॉक्स की सुरक्षा कैसे करें"}
-                {lang === "fr" && "Comment protéger votre boîte de réception numérique"}
-              </h3>
-              <div className="space-y-2.5 text-xs text-gray-500 dark:text-gray-400 font-semibold font-sans">
-                <div className="flex items-center gap-2.5">
-                  <div className="w-5 h-5 rounded-full bg-blue-600 text-white flex items-center justify-center font-bold text-[10px] shrink-0">1</div>
-                  <span>
-                    {lang === "en" && "Copy the burner email address generated above"}
-                    {lang === "es" && "Copie la dirección de correo electrónico temporal generada arriba"}
-                    {lang === "zh" && "复制上面生成的临时电子邮件地址"}
-                    {lang === "hi" && "ऊपर उत्पन्न बर्नर ईमेल पता कॉपी करें"}
-                    {lang === "fr" && "Copiez l'adresse e-mail jetable générée ci-dessus"}
-                  </span>
-                </div>
-                <div className="flex items-center gap-2.5">
-                  <div className="w-5 h-5 rounded-full bg-blue-600 text-white flex items-center justify-center font-bold text-[10px] shrink-0">2</div>
-                  <span>
-                    {lang === "en" && "Use it on any service asking for a signup/verification"}
-                    {lang === "es" && "Úselo en cualquier servicio que solicite un registro o verificación"}
-                    {lang === "zh" && "在任何要求注册/验证的服务上使用它"}
-                    {lang === "hi" && "साइनअप/सत्यापन मांगने वाली किसी भी सेवा पर इसका उपयोग करें"}
-                    {lang === "fr" && "Utilisez-le sur n'importe quel service demandant une inscription/vérification"}
-                  </span>
-                </div>
-                <div className="flex items-center gap-2.5">
-                  <div className="w-5 h-5 rounded-full bg-blue-600 text-white flex items-center justify-center font-bold text-[10px] shrink-0">3</div>
-                  <span>
-                    {lang === "en" && "Read incoming messages in the live inbox below"}
-                    {lang === "es" && "Lea los mensajes entrantes en la bandeja de entrada en vivo a continuación"}
-                    {lang === "zh" && "在下方实时收件箱中阅读传入的邮件"}
-                    {lang === "hi" && "नीचे लाइव इनबॉक्स में आने वाले संदेश पढ़ें"}
-                    {lang === "fr" && "Lisez les messages entrants dans la boîte de réception en direct ci-dessous"}
-                  </span>
-                </div>
+          <div className="space-y-4 lg:pl-6">
+            <span className="bg-emerald-50 dark:bg-emerald-950/40 text-[#00b074] dark:text-emerald-400 px-2.5 py-1 rounded-lg text-[10px] uppercase tracking-wider font-extrabold block w-fit">
+              {lang === "en" && "Quick Start Guide"}
+              {lang === "es" && "Guía de Inicio Rápido"}
+              {lang === "zh" && "快速入门指南"}
+              {lang === "hi" && "त्वरित प्रारंभ मार्गदर्शिका"}
+              {lang === "fr" && "Guide de démarrage rapide"}
+            </span>
+            <h3 className="font-display font-black text-lg text-gray-900 dark:text-white leading-tight">
+              {lang === "en" && "How to protect your digital inbox"}
+              {lang === "es" && "Cómo proteger su bandeja de entrada digital"}
+              {lang === "zh" && "如何保护您的数字收件箱"}
+              {lang === "hi" && "अपने डिजिटल इनबॉक्स की सुरक्षा कैसे करें"}
+              {lang === "fr" && "Comment protéger votre boîte de réception numérique"}
+            </h3>
+            <div className="space-y-3.5 text-xs sm:text-sm text-gray-500 dark:text-gray-400 font-semibold font-sans">
+              <div className="flex items-center gap-3">
+                <div className="w-6 h-6 rounded-full bg-[#00b074] text-white flex items-center justify-center font-bold text-xs shrink-0 shadow-sm shadow-emerald-500/15">1</div>
+                <span>
+                  {lang === "en" && "Copy the burner email address generated above"}
+                  {lang === "es" && "Copie la dirección de correo electrónico temporal generada arriba"}
+                  {lang === "zh" && "复制上面生成的临时电子邮件地址"}
+                  {lang === "hi" && "ऊपर उत्पन्न बर्नर ईमेल पता कॉपी करें"}
+                  {lang === "fr" && "Copiez l'adresse e-mail jetable générée ci-dessus"}
+                </span>
+              </div>
+              <div className="flex items-center gap-3">
+                <div className="w-6 h-6 rounded-full bg-[#00b074] text-white flex items-center justify-center font-bold text-xs shrink-0 shadow-sm shadow-emerald-500/15">2</div>
+                <span>
+                  {lang === "en" && "Use it on any service asking for a signup/verification"}
+                  {lang === "es" && "Úselo en cualquier servicio que solicite un registro o verificación"}
+                  {lang === "zh" && "在任何要求注册/验证的服务上使用它"}
+                  {lang === "hi" && "साइनअप/सत्यापन मांगने वाली किसी भी सेवा पर इसका उपयोग करें"}
+                  {lang === "fr" && "Utilisez-le sur n'importe quel service demandant une inscription/vérification"}
+                </span>
+              </div>
+              <div className="flex items-center gap-3">
+                <div className="w-6 h-6 rounded-full bg-[#00b074] text-white flex items-center justify-center font-bold text-xs shrink-0 shadow-sm shadow-emerald-500/15">3</div>
+                <span>
+                  {lang === "en" && "Read incoming messages in the live inbox below"}
+                  {lang === "es" && "Lea los mensajes entrantes en la bandeja de entrada en vivo a continuación"}
+                  {lang === "zh" && "在下方实时收件箱中阅读传入的邮件"}
+                  {lang === "hi" && "नीचे लाइव इनबॉक्स में आने वाले संदेश पढ़ें"}
+                  {lang === "fr" && "Lisez les messages entrants dans la boîte de réception en direct ci-dessous"}
+                </span>
               </div>
             </div>
           </div>
@@ -1784,10 +2020,40 @@ export default function App() {
               </div>
             </div>
 
-            {/* Created by Tom Badge */}
-            <div className="border border-blue-950/60 rounded-xl px-5 py-2 bg-slate-900 text-gray-400 font-bold tracking-wider text-[10px] uppercase flex items-center space-x-2">
-              <span>Created by</span>
-              <span className="text-white font-black font-display tracking-tight text-xs">Tom</span>
+            {/* Dummy Social Media Icons */}
+            <div className="flex items-center justify-center space-x-3 pt-2">
+              <a 
+                href="#" 
+                onClick={(e) => e.preventDefault()}
+                className="w-9 h-9 rounded-xl bg-slate-900 hover:bg-[#00b074] border border-blue-950/60 text-gray-400 hover:text-white flex items-center justify-center transition-all duration-200 shadow-md cursor-pointer hover:scale-105 active:scale-95" 
+                title="Twitter"
+              >
+                <Twitter className="w-4 h-4" />
+              </a>
+              <a 
+                href="#" 
+                onClick={(e) => e.preventDefault()}
+                className="w-9 h-9 rounded-xl bg-slate-900 hover:bg-[#00b074] border border-blue-950/60 text-gray-400 hover:text-white flex items-center justify-center transition-all duration-200 shadow-md cursor-pointer hover:scale-105 active:scale-95" 
+                title="GitHub"
+              >
+                <Github className="w-4 h-4" />
+              </a>
+              <a 
+                href="#" 
+                onClick={(e) => e.preventDefault()}
+                className="w-9 h-9 rounded-xl bg-slate-900 hover:bg-[#00b074] border border-blue-950/60 text-gray-400 hover:text-white flex items-center justify-center transition-all duration-200 shadow-md cursor-pointer hover:scale-105 active:scale-95" 
+                title="Instagram"
+              >
+                <Instagram className="w-4 h-4" />
+              </a>
+              <a 
+                href="#" 
+                onClick={(e) => e.preventDefault()}
+                className="w-9 h-9 rounded-xl bg-slate-900 hover:bg-[#00b074] border border-blue-950/60 text-gray-400 hover:text-white flex items-center justify-center transition-all duration-200 shadow-md cursor-pointer hover:scale-105 active:scale-95" 
+                title="LinkedIn"
+              >
+                <Linkedin className="w-4 h-4" />
+              </a>
             </div>
 
           </div>
