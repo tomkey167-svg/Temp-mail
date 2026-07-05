@@ -13,6 +13,7 @@ interface ClientRequestState {
   addressCreations: number;
   lastCreationTime: number;
   requestsCount: number;
+  lastRequestResetTime: number;
 }
 const ipTracker: Record<string, ClientRequestState> = {};
 
@@ -21,14 +22,15 @@ function rateLimitAndAbuseCheck(req: express.Request, res: express.Response, nex
   const now = Date.now();
 
   if (!ipTracker[ip]) {
-    ipTracker[ip] = { addressCreations: 0, lastCreationTime: 0, requestsCount: 0 };
+    ipTracker[ip] = { addressCreations: 0, lastCreationTime: 0, requestsCount: 0, lastRequestResetTime: now };
   }
 
   const tracker = ipTracker[ip];
   
   // Reset window if more than 1 minute has passed
-  if (now - tracker.lastCreationTime > 60000) {
+  if (now - tracker.lastRequestResetTime > 60000) {
     tracker.requestsCount = 0;
+    tracker.lastRequestResetTime = now;
   }
   
   tracker.requestsCount++;
@@ -349,7 +351,7 @@ app.post("/api/abuse-check", (req, res) => {
   const now = Date.now();
 
   if (!ipTracker[ip]) {
-    ipTracker[ip] = { addressCreations: 0, lastCreationTime: 0, requestsCount: 0 };
+    ipTracker[ip] = { addressCreations: 0, lastCreationTime: 0, requestsCount: 0, lastRequestResetTime: now };
   }
 
   const tracker = ipTracker[ip];

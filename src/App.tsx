@@ -49,8 +49,8 @@ export default function App() {
   const [isLoadingContent, setIsLoadingContent] = useState<boolean>(false);
   const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
 
-  // Time Limit Timer State (Default 2 minutes)
-  const [timeLeft, setTimeLeft] = useState<number>(120);
+  // Time Limit Timer State (Default 10 minutes)
+  const [timeLeft, setTimeLeft] = useState<number>(600);
   const [isCopied, setIsCopied] = useState<boolean>(false);
 
   // Overlays / Modals States
@@ -205,14 +205,14 @@ export default function App() {
       setUsername(generatedUsername);
       setActiveDomain(randomDomain);
       setEmailAddress(fullAddress);
-      setTimeLeft(120); // 2 minutes default
+      setTimeLeft(600); // 10 minutes default
       setSelectedMessage(null);
       setMessages([]);
       
       localStorage.setItem("volt_username", generatedUsername);
       localStorage.setItem("volt_domain", randomDomain);
       localStorage.setItem("volt_email", fullAddress);
-      localStorage.setItem("volt_expiry_timestamp", String(Date.now() + 120000));
+      localStorage.setItem("volt_expiry_timestamp", String(Date.now() + 600000));
     } catch (e) {
       console.error("Failed to generate mailbox", e);
     }
@@ -345,7 +345,7 @@ export default function App() {
       setTimeLeft((prev) => {
         if (prev <= 1) {
           generateNewMailbox();
-          return 120;
+          return 600;
         }
         return prev - 1;
       });
@@ -383,7 +383,7 @@ export default function App() {
     setUsername(cleanUser);
     setActiveDomain(customDomain);
     setEmailAddress(fullAddress);
-    setTimeLeft(120); // Reset timer to 2 minutes
+    setTimeLeft(600); // Reset timer to 10 minutes
     setSelectedMessage(null);
     setMessages([]);
     setIsCustomizing(false);
@@ -391,7 +391,7 @@ export default function App() {
     localStorage.setItem("volt_username", cleanUser);
     localStorage.setItem("volt_domain", customDomain);
     localStorage.setItem("volt_email", fullAddress);
-    localStorage.setItem("volt_expiry_timestamp", String(Date.now() + 120000));
+    localStorage.setItem("volt_expiry_timestamp", String(Date.now() + 600000));
   };
 
   // Toggle saving an incoming message locally
@@ -425,7 +425,7 @@ export default function App() {
     setEmailAddress("");
     setMessages([]);
     setSelectedMessage(null);
-    setTimeLeft(120);
+    setTimeLeft(600);
     setIsCustomizing(false);
     setIsMoreOpen(false);
 
@@ -2079,7 +2079,7 @@ export default function App() {
                       <p>Temporary Email Generator provides inbound-only temporary email addresses.</p>
                       <ul className="list-disc pl-5 space-y-1">
                         <li><span className="font-bold text-gray-800 dark:text-white">Outbound Mail Blocked:</span> You are strictly forbidden and technically blocked from dispatching outbound emails using our domains. This prevents spam abuse and maintains high domain reputation.</li>
-                        <li><span className="font-bold text-gray-800 dark:text-white">Ephemeral Storage:</span> All incoming emails, text payloads, and file attachments are stored in-memory for a limited duration of 120 seconds (2 minutes). Upon expiration of the active mailbox timer or manual click of the 'Delete' button, all records are permanently and irreversibly purged from our servers.</li>
+                        <li><span className="font-bold text-gray-800 dark:text-white">Ephemeral Storage:</span> All incoming emails, text payloads, and file attachments are stored in-memory for a limited duration of 10 minutes (600 seconds). Upon expiration of the active mailbox timer or manual click of the 'Delete' button, all records are permanently and irreversibly purged from our servers.</li>
                         <li><span className="font-bold text-gray-800 dark:text-white">Firestore Synchronization:</span> To secure temporary access for active users, email payloads received during an active session may be synchronized to temporary cloud persistence. These remain private and are subject to automated cleanup policies.</li>
                       </ul>
                     </div>
