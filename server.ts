@@ -383,31 +383,154 @@ app.get("/robots.txt", (req, res) => {
   const protocol = (req.headers["x-forwarded-proto"] as string) || req.protocol || "https";
   const appUrl = process.env.APP_URL || `${protocol}://${req.get("host")}`;
   res.type("text/plain");
-  res.send(`User-agent: *\nAllow: /\nSitemap: ${appUrl}/sitemap.xml`);
+  res.send(`User-agent: *\nAllow: /\nSitemap: ${appUrl}/sitemap-index.xml`);
 });
 
-// 8. sitemap.xml endpoint for SEO indexing
+// 8. sitemap-index.xml (The Master Index)
+app.get("/sitemap-index.xml", (req, res) => {
+  const protocol = (req.headers["x-forwarded-proto"] as string) || req.protocol || "https";
+  const appUrl = process.env.APP_URL || `${protocol}://${req.get("host")}`;
+  const sitemapIndex = `<?xml version="1.0" encoding="UTF-8"?>
+<sitemapindex xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <sitemap>
+    <loc>${appUrl}/sitemap-pages.xml</loc>
+  </sitemap>
+  <sitemap>
+    <loc>${appUrl}/sitemap-domains.xml</loc>
+  </sitemap>
+</sitemapindex>`;
+  res.type("application/xml");
+  res.send(sitemapIndex);
+});
+
+// 9. sitemap-pages.xml (Static Pages)
+app.get("/sitemap-pages.xml", (req, res) => {
+  const protocol = (req.headers["x-forwarded-proto"] as string) || req.protocol || "https";
+  const appUrl = process.env.APP_URL || `${protocol}://${req.get("host")}`;
+  const sitemapPages = `<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <url>
+    <loc>${appUrl}/</loc>
+    <priority>1.0</priority>
+    <changefreq>daily</changefreq>
+  </url>
+  <url>
+    <loc>${appUrl}/#home</loc>
+    <priority>1.0</priority>
+    <changefreq>daily</changefreq>
+  </url>
+  <url>
+    <loc>${appUrl}/#blog</loc>
+    <priority>0.8</priority>
+    <changefreq>weekly</changefreq>
+  </url>
+  <url>
+    <loc>${appUrl}/#faq</loc>
+    <priority>0.8</priority>
+    <changefreq>weekly</changefreq>
+  </url>
+  <url>
+    <loc>${appUrl}/#about</loc>
+    <priority>0.7</priority>
+    <changefreq>monthly</changefreq>
+  </url>
+  <url>
+    <loc>${appUrl}/#contact</loc>
+    <priority>0.7</priority>
+    <changefreq>monthly</changefreq>
+  </url>
+  <url>
+    <loc>${appUrl}/#privacy</loc>
+    <priority>0.5</priority>
+    <changefreq>monthly</changefreq>
+  </url>
+  <url>
+    <loc>${appUrl}/#terms</loc>
+    <priority>0.5</priority>
+    <changefreq>monthly</changefreq>
+  </url>
+  <url>
+    <loc>${appUrl}/#api-documentation</loc>
+    <priority>0.7</priority>
+    <changefreq>monthly</changefreq>
+  </url>
+  <url>
+    <loc>${appUrl}/#blog/what-is-temporary-email-when-to-use-one</loc>
+    <priority>0.6</priority>
+    <changefreq>monthly</changefreq>
+  </url>
+  <url>
+    <loc>${appUrl}/#blog/avoid-spam-without-changing-your-real-email</loc>
+    <priority>0.6</priority>
+    <changefreq>monthly</changefreq>
+  </url>
+  <url>
+    <loc>${appUrl}/#blog/temporary-email-vs-email-aliases-difference</loc>
+    <priority>0.6</priority>
+    <changefreq>monthly</changefreq>
+  </url>
+  <url>
+    <loc>${appUrl}/#blog/is-it-safe-to-use-disposable-email-for-signups</loc>
+    <priority>0.6</priority>
+    <changefreq>monthly</changefreq>
+  </url>
+  <url>
+    <loc>${appUrl}/#blog/top-5-situations-where-disposable-email-saves-time</loc>
+    <priority>0.6</priority>
+    <changefreq>monthly</changefreq>
+  </url>
+</urlset>`;
+  res.type("application/xml");
+  res.send(sitemapPages);
+});
+
+// Helper function to fetch active domains for sitemap
+async function getSitemapDomains(): Promise<string[]> {
+  try {
+    const response = await fetch("https://api.mail.tm/domains");
+    if (response.ok) {
+      const data: any = await response.json();
+      const domains = (data["hydra:member"] || [])
+        .filter((d: any) => d.isActive)
+        .map((d: any) => d.domain)
+        .sort((a: string, b: string) => a.length - b.length);
+      if (domains.length > 0) {
+        return domains;
+      }
+    }
+  } catch (error: any) {
+    console.error("Error fetching domains for sitemap-domains.xml:", error.message);
+  }
+  return ["mail.tm", "emlpro.com", "emltmp.com", "secmail.pro", "web-library.net"];
+}
+
+// 10. sitemap-domains.xml (Active Email Domains)
+app.get("/sitemap-domains.xml", async (req, res) => {
+  const protocol = (req.headers["x-forwarded-proto"] as string) || req.protocol || "https";
+  const appUrl = process.env.APP_URL || `${protocol}://${req.get("host")}`;
+  const domains = await getSitemapDomains();
+  
+  const urls = domains.map((domain) => {
+    return `  <url>
+    <loc>${appUrl}/domain/${domain}</loc>
+    <priority>0.8</priority>
+    <changefreq>daily</changefreq>
+  </url>`;
+  }).join("\n");
+
+  const sitemapDomains = `<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+${urls}
+</urlset>`;
+  res.type("application/xml");
+  res.send(sitemapDomains);
+});
+
+// Legacy fallback redirect for /sitemap.xml
 app.get("/sitemap.xml", (req, res) => {
   const protocol = (req.headers["x-forwarded-proto"] as string) || req.protocol || "https";
   const appUrl = process.env.APP_URL || `${protocol}://${req.get("host")}`;
-  const sitemap = `<?xml version="1.0" encoding="UTF-8"?>
-<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
-  <url><loc>${appUrl}/</loc><priority>1.0</priority></url>
-  <url><loc>${appUrl}/#home</loc><priority>1.0</priority></url>
-  <url><loc>${appUrl}/#blog</loc><priority>0.8</priority></url>
-  <url><loc>${appUrl}/#faq</loc><priority>0.8</priority></url>
-  <url><loc>${appUrl}/#about</loc><priority>0.7</priority></url>
-  <url><loc>${appUrl}/#contact</loc><priority>0.7</priority></url>
-  <url><loc>${appUrl}/#privacy</loc><priority>0.5</priority></url>
-  <url><loc>${appUrl}/#terms</loc><priority>0.5</priority></url>
-  <url><loc>${appUrl}/#blog/what-is-temporary-email-when-to-use-one</loc><priority>0.6</priority></url>
-  <url><loc>${appUrl}/#blog/avoid-spam-without-changing-your-real-email</loc><priority>0.6</priority></url>
-  <url><loc>${appUrl}/#blog/temporary-email-vs-email-aliases-difference</loc><priority>0.6</priority></url>
-  <url><loc>${appUrl}/#blog/is-it-safe-to-use-disposable-email-for-signups</loc><priority>0.6</priority></url>
-  <url><loc>${appUrl}/#blog/top-5-situations-where-disposable-email-saves-time</loc><priority>0.6</priority></url>
-</urlset>`;
-  res.type("application/xml");
-  res.send(sitemap);
+  res.redirect(301, `${appUrl}/sitemap-index.xml`);
 });
 
 // Vite Server or Static Handler setup

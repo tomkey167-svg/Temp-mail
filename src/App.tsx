@@ -109,6 +109,7 @@ export default function App() {
   const [activeTab, setActiveTab] = useState<"messages" | "saved">("messages");
   const [mobileMenuOpen, setMobileMenuOpen] = useState<boolean>(false);
   const [soundEnabled, setSoundEnabled] = useState<boolean>(true);
+  const [detectedUrlDomain, setDetectedUrlDomain] = useState<string | null>(null);
   const isFirstFetch = useRef(true);
   const messagesRef = useRef<MailMessage[]>([]);
 
@@ -285,6 +286,35 @@ export default function App() {
       const savedDomain = localStorage.getItem("volt_domain");
       const savedEmail = localStorage.getItem("volt_email");
       const savedExpiry = localStorage.getItem("volt_expiry_timestamp");
+
+      // Detect domain name from URL path /domain/domain-name or hash #domain/domain-name
+      const pathMatch = window.location.pathname.match(/^\/domain\/([^/]+)/);
+      const hashMatch = window.location.hash.match(/#domain\/([^/]+)/) || window.location.hash.match(/#\/domain\/([^/]+)/);
+      const urlDomain = (pathMatch ? pathMatch[1] : (hashMatch ? hashMatch[1] : null))?.trim().toLowerCase();
+
+      if (urlDomain) {
+        setDetectedUrlDomain(urlDomain);
+        addDiagnosticLog("info", `Detected target domain from URL: @${urlDomain}`);
+        
+        // If there is a saved session and it matches the URL domain, restore it!
+        if (savedUser && savedDomain === urlDomain && savedEmail && savedExpiry) {
+          const expTime = Number(savedExpiry);
+          const remSecs = Math.floor((expTime - Date.now()) / 1000);
+          if (remSecs > 5) {
+            setUsername(savedUser);
+            setActiveDomain(savedDomain);
+            setEmailAddress(savedEmail);
+            setTimeLeft(remSecs);
+            addDiagnosticLog("success", `Restored matching URL domain mailbox session: ${savedEmail}.`);
+            return;
+          }
+        }
+        
+        // Otherwise, generate a new mailbox specifically for the requested URL domain!
+        addDiagnosticLog("info", `Generating new mailbox with specified URL domain: @${urlDomain}`);
+        await generateNewMailbox([urlDomain]);
+        return;
+      }
 
       if (savedUser && savedDomain && savedEmail && savedExpiry) {
         const expTime = Number(savedExpiry);
@@ -970,13 +1000,32 @@ export default function App() {
           
           {/* Left Text Content Column */}
           <div className="space-y-6 text-left">
+            {detectedUrlDomain && (
+              <div className="inline-flex items-center space-x-1.5 bg-[#eefbf6] dark:bg-emerald-950/40 text-[#00b074] px-3.5 py-1.5 rounded-full text-xs font-bold border border-emerald-500/10 mb-1">
+                <span className="w-1.5 h-1.5 bg-[#00b074] rounded-full animate-pulse" />
+                <span>Dedicated Domain Extension: @{detectedUrlDomain}</span>
+              </div>
+            )}
             <h1 className="text-4xl sm:text-5xl lg:text-5.5xl font-display font-black tracking-tight text-slate-900 dark:text-white leading-[1.15]">
-              Free Temporary Email <br />
-              Address <span className="text-[#00b074]">Generator</span>
+              {detectedUrlDomain ? (
+                <>
+                  Free <span className="text-[#00b074]">@{detectedUrlDomain}</span> <br />
+                  Temp Mail Generator
+                </>
+              ) : (
+                <>
+                  Free Temporary Email <br />
+                  Address <span className="text-[#00b074]">Generator</span>
+                </>
+              )}
             </h1>
 
             <p className="text-sm sm:text-base text-slate-500 dark:text-slate-400 font-medium max-w-xl leading-relaxed">
-              Protect your privacy and keep spam out of your inbox. Generate a secure, free temporary email address in seconds.
+              {detectedUrlDomain ? (
+                `Need a disposable email address ending with @${detectedUrlDomain}? VoltInbox has you covered. Get an anonymous, safe, and secure mailbox ending with @${detectedUrlDomain} instantly to protect yourself from trackers and spam.`
+              ) : (
+                "Protect your privacy and keep spam out of your inbox. Generate a secure, free temporary email address in seconds."
+              )}
             </p>
 
             <div className="grid grid-cols-2 gap-y-3.5 gap-x-4 max-w-md pt-2">
