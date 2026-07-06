@@ -386,7 +386,128 @@ app.get("/robots.txt", (req, res) => {
   res.send(`User-agent: *\nAllow: /\nSitemap: ${appUrl}/sitemap-index.xml`);
 });
 
-// 8. sitemap-index.xml (The Master Index)
+// 8. sitemap.html (HTML Sitemap for crawler indexing and visual navigation)
+app.get("/sitemap.html", async (req, res) => {
+  const protocol = (req.headers["x-forwarded-proto"] as string) || req.protocol || "https";
+  const appUrl = process.env.APP_URL || `${protocol}://${req.get("host")}`;
+  const domains = await getSitemapDomains();
+
+  const domainLinks = domains.map(domain => `
+    <li>
+      <a href="${appUrl}/domain/${domain}" class="domain-link">
+        Temp Mail endings with @${domain}
+      </a>
+    </li>
+  `).join("");
+
+  const html = `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>HTML Sitemap - Temp-Mail-Generator.site</title>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      line-height: 1.6;
+      color: #1e293b;
+      max-width: 800px;
+      margin: 0 auto;
+      padding: 40px 20px;
+      background-color: #f8fafc;
+    }
+    h1 {
+      font-size: 2rem;
+      font-weight: 800;
+      color: #0f172a;
+      margin-bottom: 8px;
+    }
+    h2 {
+      font-size: 1.25rem;
+      font-weight: 700;
+      color: #0f172a;
+      margin-top: 32px;
+      border-bottom: 2px solid #e2e8f0;
+      padding-bottom: 8px;
+    }
+    p {
+      color: #64748b;
+      margin-top: 0;
+      margin-bottom: 24px;
+    }
+    ul {
+      list-style-type: none;
+      padding: 0;
+      margin: 0;
+    }
+    li {
+      margin-bottom: 12px;
+    }
+    a {
+      color: #00b074;
+      text-decoration: none;
+      font-weight: 500;
+    }
+    a:hover {
+      text-decoration: underline;
+    }
+    .grid {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 16px;
+    }
+    @media (min-width: 640px) {
+      .grid {
+        grid-template-columns: 1fr 1fr;
+      }
+    }
+    .footer {
+      margin-top: 48px;
+      text-align: center;
+      font-size: 0.875rem;
+      color: #94a3b8;
+    }
+  </style>
+</head>
+<body>
+  <h1>VoltInbox Sitemap</h1>
+  <p>Find all pages, articles, and active temporary email domains on Temp-Mail-Generator.site.</p>
+  
+  <h2>General Pages &amp; Utilities</h2>
+  <ul>
+    <li><a href="${appUrl}/">Homepage &amp; Temp Mail Generator</a></li>
+    <li><a href="${appUrl}/#api-documentation">Free API Documentation</a></li>
+    <li><a href="${appUrl}/#faq">Frequently Asked Questions (FAQ)</a></li>
+    <li><a href="${appUrl}/#about">About Us</a></li>
+    <li><a href="${appUrl}/#contact">Contact Support</a></li>
+    <li><a href="${appUrl}/#privacy">Privacy Policy</a></li>
+    <li><a href="${appUrl}/#terms">Terms of Service</a></li>
+  </ul>
+
+  <h2>Blog &amp; Privacy Resources</h2>
+  <ul>
+    <li><a href="${appUrl}/#blog/what-is-temporary-email-when-to-use-one">What is a Temporary Email &amp; When to Use One</a></li>
+    <li><a href="${appUrl}/#blog/avoid-spam-without-changing-your-real-email">How to Avoid Spam Without Changing Your Real Email</a></li>
+    <li><a href="${appUrl}/#blog/temporary-email-vs-email-aliases-difference">Temporary Email vs. Email Aliases: What's the Difference?</a></li>
+    <li><a href="${appUrl}/#blog/is-it-safe-to-use-disposable-email-for-signups">Is it Safe to Use a Disposable Email for Signups?</a></li>
+    <li><a href="${appUrl}/#blog/top-5-situations-where-disposable-email-saves-time">Top 5 Situations Where Disposable Email Saves Time</a></li>
+  </ul>
+
+  <h2>Active Temporary Email Domains</h2>
+  <ul class="grid">
+    ${domainLinks}
+  </ul>
+
+  <div class="footer">
+    &copy; ${new Date().getFullYear()} Temp-Mail-Generator.site (VoltInbox). All rights reserved.
+  </div>
+</body>
+</html>`;
+  res.type("text/html");
+  res.send(html.trim());
+});
+
+// 9. sitemap-index.xml (The Master Index)
 app.get("/sitemap-index.xml", (req, res) => {
   const protocol = (req.headers["x-forwarded-proto"] as string) || req.protocol || "https";
   const appUrl = process.env.APP_URL || `${protocol}://${req.get("host")}`;
@@ -398,12 +519,12 @@ app.get("/sitemap-index.xml", (req, res) => {
   <sitemap>
     <loc>${appUrl}/sitemap-domains.xml</loc>
   </sitemap>
-</sitemapindex>`;
+</sitemapindex>`.trim();
   res.type("application/xml");
   res.send(sitemapIndex);
 });
 
-// 9. sitemap-pages.xml (Static Pages)
+// 10. sitemap-pages.xml (Static Pages)
 app.get("/sitemap-pages.xml", (req, res) => {
   const protocol = (req.headers["x-forwarded-proto"] as string) || req.protocol || "https";
   const appUrl = process.env.APP_URL || `${protocol}://${req.get("host")}`;
@@ -479,15 +600,19 @@ app.get("/sitemap-pages.xml", (req, res) => {
     <priority>0.6</priority>
     <changefreq>monthly</changefreq>
   </url>
-</urlset>`;
+</urlset>`.trim();
   res.type("application/xml");
   res.send(sitemapPages);
 });
 
 // Helper function to fetch active domains for sitemap
 async function getSitemapDomains(): Promise<string[]> {
+  const fallback = ["mail.tm", "emlpro.com", "emltmp.com", "secmail.pro", "web-library.net"];
   try {
-    const response = await fetch("https://api.mail.tm/domains");
+    const controller = new AbortController();
+    const id = setTimeout(() => controller.abort(), 3500);
+    const response = await fetch("https://api.mail.tm/domains", { signal: controller.signal });
+    clearTimeout(id);
     if (response.ok) {
       const data: any = await response.json();
       const domains = (data["hydra:member"] || [])
@@ -501,10 +626,10 @@ async function getSitemapDomains(): Promise<string[]> {
   } catch (error: any) {
     console.error("Error fetching domains for sitemap-domains.xml:", error.message);
   }
-  return ["mail.tm", "emlpro.com", "emltmp.com", "secmail.pro", "web-library.net"];
+  return fallback;
 }
 
-// 10. sitemap-domains.xml (Active Email Domains)
+// 11. sitemap-domains.xml (Active Email Domains)
 app.get("/sitemap-domains.xml", async (req, res) => {
   const protocol = (req.headers["x-forwarded-proto"] as string) || req.protocol || "https";
   const appUrl = process.env.APP_URL || `${protocol}://${req.get("host")}`;
@@ -521,7 +646,7 @@ app.get("/sitemap-domains.xml", async (req, res) => {
   const sitemapDomains = `<?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
 ${urls}
-</urlset>`;
+</urlset>`.trim();
   res.type("application/xml");
   res.send(sitemapDomains);
 });
