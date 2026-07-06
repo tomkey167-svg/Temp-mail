@@ -520,7 +520,9 @@ app.get("/sitemap-index.xml", (req, res) => {
     <loc>${appUrl}/sitemap-domains.xml</loc>
   </sitemap>
 </sitemapindex>`.trim();
-  res.type("application/xml");
+  res.header("Content-Type", "application/xml; charset=utf-8");
+  res.header("X-Robots-Tag", "index, follow");
+  res.header("Cache-Control", "public, max-age=14400");
   res.send(sitemapIndex);
 });
 
@@ -601,16 +603,25 @@ app.get("/sitemap-pages.xml", (req, res) => {
     <changefreq>monthly</changefreq>
   </url>
 </urlset>`.trim();
-  res.type("application/xml");
+  res.header("Content-Type", "application/xml; charset=utf-8");
+  res.header("X-Robots-Tag", "index, follow");
+  res.header("Cache-Control", "public, max-age=14400");
   res.send(sitemapPages);
 });
 
-// Helper function to fetch active domains for sitemap
+// Helper function to fetch active domains for sitemap with 6-hour caching to ensure near-zero response time
+let cachedDomainsList: string[] | null = null;
+let cachedDomainsTimestamp = 0;
+
 async function getSitemapDomains(): Promise<string[]> {
   const fallback = ["mail.tm", "emlpro.com", "emltmp.com", "secmail.pro", "web-library.net"];
+  const now = Date.now();
+  if (cachedDomainsList && (now - cachedDomainsTimestamp < 6 * 60 * 60 * 1000)) {
+    return cachedDomainsList;
+  }
   try {
     const controller = new AbortController();
-    const id = setTimeout(() => controller.abort(), 3500);
+    const id = setTimeout(() => controller.abort(), 4000);
     const response = await fetch("https://api.mail.tm/domains", { signal: controller.signal });
     clearTimeout(id);
     if (response.ok) {
@@ -620,13 +631,15 @@ async function getSitemapDomains(): Promise<string[]> {
         .map((d: any) => d.domain)
         .sort((a: string, b: string) => a.length - b.length);
       if (domains.length > 0) {
+        cachedDomainsList = domains;
+        cachedDomainsTimestamp = now;
         return domains;
       }
     }
   } catch (error: any) {
     console.error("Error fetching domains for sitemap-domains.xml:", error.message);
   }
-  return fallback;
+  return cachedDomainsList || fallback;
 }
 
 // 11. sitemap-domains.xml (Active Email Domains)
@@ -647,15 +660,29 @@ app.get("/sitemap-domains.xml", async (req, res) => {
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
 ${urls}
 </urlset>`.trim();
-  res.type("application/xml");
+  res.header("Content-Type", "application/xml; charset=utf-8");
+  res.header("X-Robots-Tag", "index, follow");
+  res.header("Cache-Control", "public, max-age=14400"); // 4 hours browser/crawler cache
   res.send(sitemapDomains);
 });
 
-// Legacy fallback redirect for /sitemap.xml
+// Legacy fallback redirect for /sitemap.xml (now serves index XML directly to prevent 301 follow issues in crawlers!)
 app.get("/sitemap.xml", (req, res) => {
   const protocol = (req.headers["x-forwarded-proto"] as string) || req.protocol || "https";
   const appUrl = process.env.APP_URL || `${protocol}://${req.get("host")}`;
-  res.redirect(301, `${appUrl}/sitemap-index.xml`);
+  const sitemapIndex = `<?xml version="1.0" encoding="UTF-8"?>
+<sitemapindex xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <sitemap>
+    <loc>${appUrl}/sitemap-pages.xml</loc>
+  </sitemap>
+  <sitemap>
+    <loc>${appUrl}/sitemap-domains.xml</loc>
+  </sitemap>
+</sitemapindex>`.trim();
+  res.header("Content-Type", "application/xml; charset=utf-8");
+  res.header("X-Robots-Tag", "index, follow");
+  res.header("Cache-Control", "public, max-age=14400");
+  res.send(sitemapIndex);
 });
 
 // Vite Server or Static Handler setup

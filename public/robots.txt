@@ -1,4 +1,5 @@
 User-agent: *
 Allow: /
 
-Sitemap: https://ais-pre-zbkzemklwozl2vwibk7o5k-968472383435.europe-west2.run.app/sitemap.xml
+Sitemap: https://temp-mail-generator.site/sitemap-index.xml
+Sitemap: https://temp-mail-generator.site/sitemap.xml
