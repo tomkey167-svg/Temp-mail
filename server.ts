@@ -378,6 +378,59 @@ app.get("/googled87c6cde125caf0b.html", (req, res) => {
   res.send("google-site-verification: googled87c6cde125caf0b.html");
 });
 
+// Verification Key File for Domain Root Integration
+app.get("/d4f2c0ecf9004ddea86b01655385f1da.txt", (req, res) => {
+  res.header("Content-Type", "text/plain; charset=utf-8");
+  res.send("d4f2c0ecf9004ddea86b01655385f1da");
+});
+
+// IndexNow Submission API Proxy to avoid CORS issues
+app.post("/api/indexnow", async (req, res) => {
+  const { host, key, keyLocation, urlList } = req.body;
+  
+  if (!host || !key || !keyLocation || !Array.isArray(urlList) || urlList.length === 0) {
+    return res.status(400).json({ error: "Missing required parameters (host, key, keyLocation, urlList)." });
+  }
+
+  try {
+    const indexNowResponse = await fetch("https://api.indexnow.org/indexnow", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json; charset=utf-8",
+      },
+      body: JSON.stringify({ host, key, keyLocation, urlList }),
+    });
+
+    const status = indexNowResponse.status;
+    let responseText = "";
+    try {
+      responseText = await indexNowResponse.text();
+    } catch (_) {}
+
+    if (indexNowResponse.ok) {
+      return res.status(status).json({
+        success: true,
+        status,
+        message: "Successfully submitted to the IndexNow engine.",
+        data: responseText,
+      });
+    } else {
+      return res.status(status).json({
+        success: false,
+        status,
+        message: `IndexNow engine returned error status ${status}`,
+        data: responseText,
+      });
+    }
+  } catch (error) {
+    console.error("IndexNow proxy error:", error);
+    return res.status(500).json({
+      success: false,
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
+});
+
 // 7. robots.txt endpoint for crawlers
 app.get("/robots.txt", (req, res) => {
   const protocol = (req.headers["x-forwarded-proto"] as string) || req.protocol || "https";
